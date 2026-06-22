@@ -16,16 +16,41 @@ export const runtime = "nodejs";
 // this verified server path may seed).
 // ============================================================
 
-async function requireAdmin(req: NextRequest): Promise<string | null> {
+type AdminCheck = { ok: true; uid: string } | { ok: false; reason: string };
+
+async function requireAdmin(req: NextRequest): Promise<AdminCheck> {
   const header = req.headers.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token) return null;
+
+  // Cause 1: no token reached the server.
+  if (!token) {
+    return {
+      ok: false,
+      reason:
+        "No auth token was sent with the request. The client isn't attaching your session token — try a fresh sign-in.",
+    };
+  }
+
   try {
     const decoded = await adminAuth().verifyIdToken(token);
-    if (decoded.role !== "admin") return null;
-    return decoded.uid;
-  } catch {
-    return null;
+
+    // Cause 3: token is valid, but the role custom claim isn't "admin".
+    if (decoded.role !== "admin") {
+      return {
+        ok: false,
+        reason: `Your token is valid, but its role claim is "${
+          decoded.role ?? "undefined"
+        }", not "admin". This means the admin custom claim isn't on your token yet. Re-run set-role.ts against the SAME Firebase project this deployment uses, then sign out and back in.`,
+      };
+    }
+
+    return { ok: true, uid: decoded.uid };
+  } catch (e: any) {
+    // Cause 2: verification itself failed (wrong project, bad key, expired).
+    return {
+      ok: false,
+      reason: `Token verification failed: ${e.message}. The most common cause is that Vercel's FIREBASE_ADMIN_* env vars point at a different Firebase project than the one your login token came from, or the private key's \\n escaping is broken.`,
+    };
   }
 }
 
@@ -91,12 +116,9 @@ function parseSheet(name: string, rows: any[]): { dept: Department; found: numbe
 }
 
 export async function POST(req: NextRequest) {
-  const uid = await requireAdmin(req);
-  if (!uid) {
-    return NextResponse.json(
-      { error: "Unauthorized. Admin access required." },
-      { status: 401 }
-    );
+  const check = await requireAdmin(req);
+  if (!check.ok) {
+    return NextResponse.json({ error: check.reason }, { status: 401 });
   }
 
   const formData = await req.formData();
