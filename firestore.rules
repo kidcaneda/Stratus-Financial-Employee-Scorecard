@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: is the requester signed in?
+    function signedIn() {
+      return request.auth != null;
+    }
+    // Helper: requester's role from custom claims.
+    function role() {
+      return request.auth.token.role;
+    }
+    function isAdmin() {
+      return signedIn() && role() == 'admin';
+    }
+    function isManager() {
+      return signedIn() && role() == 'manager';
+    }
+
+    // users/{uid} — a person reads their own profile; admins read all.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // departments/{id} — any signed-in user may read (UI filters by role).
+    // Only admins (via sync route / Admin SDK) may write.
+    match /departments/{deptId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+
+      // Nested metrics inherit the same policy.
+      match /metrics/{metricId} {
+        allow read: if signedIn();
+        allow write: if isAdmin();
+      }
+    }
+
+    // config/* — thresholds and settings. Read: all signed in. Write: admin.
+    match /config/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // NOTE: The Firebase Admin SDK (used by /api/sync) bypasses these
+    // rules entirely, which is why seeding/writes happen server-side.
+  }
+}
