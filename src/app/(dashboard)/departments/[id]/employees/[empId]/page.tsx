@@ -80,7 +80,7 @@ export default function EmployeeDetailPage() {
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-paper text-left text-xs uppercase tracking-wide text-ink-muted">
+            <tr className="border-b border-hairline bg-panel-2 text-left text-xs uppercase tracking-wide text-ink-muted">
               <th className="px-4 py-3 font-medium">Metric</th>
               <th className="px-4 py-3 text-right font-medium">Actual</th>
               <th className="px-4 py-3 text-right font-medium">Weight</th>
@@ -88,11 +88,11 @@ export default function EmployeeDetailPage() {
               <th className="px-4 py-3 text-right font-medium">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-hairline">
             {emp.metrics.map((m) => {
               const res = scoreMetric(m, period);
               return (
-                <tr key={m.id} className="hover:bg-paper">
+                <tr key={m.id} className="hover:bg-panel-2">
                   <td className="px-4 py-3 font-medium text-ink">{m.name}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-ink">
                     {fmt(m.actual[period], 1)} {m.unit}
