@@ -7,9 +7,11 @@ import { useDepartments } from "@/hooks/useDepartments";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useMonthlyEvaluations } from "@/hooks/useMonthlyEvaluations";
 import { scoreEmployee, scoreMetric, fmt } from "@/lib/scoring";
+import { analyze } from "@/lib/analytics";
 import { Period } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
 import { MonthlyTrend } from "@/components/MonthlyTrend";
+import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 
 export default function EmployeeDetailPage() {
   const { id, empId } = useParams<{ id: string; empId: string }>();
@@ -58,6 +60,9 @@ export default function EmployeeDetailPage() {
 
       {/* Phase C: dated monthly time-series — trend + quarter/year rollups */}
       <MonthlyTrend months={months} year={new Date().getFullYear()} />
+
+      {/* Phase E: rule-based analytics derived from the time-series */}
+      <AnalyticsPanel report={analyze(months)} />
 
       {/* Overall */}
       <div className="card flex items-center gap-6 p-6">
