@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { MonthlyEvaluation, AuditEntry } from "@/types";
+import { sendEmail, evaluationEmail } from "@/lib/mailer";
 
 export const runtime = "nodejs";
 
@@ -108,6 +109,7 @@ export async function POST(req: NextRequest) {
     await ref.set(
       {
         ...evaluation,
+        ackStatus: "pending",
         recordedBy: actor.uid,
         recordedByName: actor.name,
         recordedAt: Date.now(),
@@ -129,5 +131,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Write failed: ${e.message}` }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, monthKey: evaluation.monthKey });
+  // Phase D: notify the employee by email (best-effort; never blocks the
+  // save). Looks up the employee's email from their record.
+  let emailNote: string | undefined;
+  try {
+    const empSnap = await adminDb()
+      .collection("departments")
+      .doc(evaluation.departmentId)
+      .collection("employees")
+      .doc(evaluation.employeeId)
+      .get();
+    const empEmail = empSnap.data()?.email;
+    const empName = empSnap.data()?.name ?? "there";
+    if (empEmail) {
+      const appUrl = process.env.APP_URL || "";
+      const reviewUrl = `${appUrl}/my-evaluations`;
+      const { subject, html } = evaluationEmail({
+        employeeName: empName,
+        monthLabel: evaluation.monthKey,
+        evaluatorName: actor.name,
+        reviewUrl,
+      });
+      const sent = await sendEmail({ to: empEmail, subject, html });
+      if (sent.skipped) emailNote = "Email service not configured; notification skipped.";
+      else if (!sent.ok) emailNote = `Email failed: ${sent.error}`;
+    } else {
+      emailNote = "Employee has no email on file; notification skipped.";
+    }
+  } catch (e: any) {
+    emailNote = `Email step error: ${e.message}`;
+  }
+
+  return NextResponse.json({ ok: true, monthKey: evaluation.monthKey, emailNote });
 }
