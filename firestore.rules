@@ -2,47 +2,65 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: is the requester signed in?
-    function signedIn() {
-      return request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function role() { return request.auth.token.role; }
+    function isAdmin() { return signedIn() && role() == 'admin'; }
+    function isManager() { return signedIn() && role() == 'manager'; }
+
+    // The departments a manager is assigned to (from assignments/{uid}).
+    function assignedDepts() {
+      return get(/databases/$(database)/documents/assignments/$(request.auth.uid)).data.departmentIds;
     }
-    // Helper: requester's role from custom claims.
-    function role() {
-      return request.auth.token.role;
-    }
-    function isAdmin() {
-      return signedIn() && role() == 'admin';
-    }
-    function isManager() {
-      return signedIn() && role() == 'manager';
+    function managesDept(deptId) {
+      return isManager() && deptId in assignedDepts();
     }
 
-    // users/{uid} — a person reads their own profile; admins read all.
+    // users/{uid} — own profile read; admin full.
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow write: if isAdmin();
     }
 
-    // departments/{id} — any signed-in user may read (UI filters by role).
-    // Only admins (via sync route / Admin SDK) may write.
+    // assignments/{uid} — manager→department map. Read own or admin; write admin only.
+    match /assignments/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // departments/{id} — read for all signed-in; template writes admin only.
     match /departments/{deptId} {
       allow read: if signedIn();
       allow write: if isAdmin();
 
-      // Nested metrics inherit the same policy.
       match /metrics/{metricId} {
         allow read: if signedIn();
         allow write: if isAdmin();
       }
+
+      // employees subcollection — managers may write to THEIR departments,
+      // admins to any. This is the core Phase B write permission.
+      match /employees/{employeeId} {
+        allow read: if signedIn();
+        allow create, update: if isAdmin() || managesDept(deptId);
+        allow delete: if isAdmin();
+      }
     }
 
-    // config/* — thresholds and settings. Read: all signed in. Write: admin.
+    // audit/{id} — append-only trail. Anyone signed in may create (the
+    // server route writes these); NOBODY may update or delete. Admins read.
+    match /audit/{entryId} {
+      allow read: if isAdmin();
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+
+    // config/* — thresholds/settings. Read all signed in; write admin.
     match /config/{docId} {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
 
-    // NOTE: The Firebase Admin SDK (used by /api/sync) bypasses these
-    // rules entirely, which is why seeding/writes happen server-side.
+    // NOTE: The Firebase Admin SDK (server routes) bypasses these rules,
+    // which is why privileged writes happen server-side with verification.
   }
 }
