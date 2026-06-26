@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { Department, Metric, Period, SyncLogEntry } from "@/types";
+import {
+  Department,
+  Metric,
+  Period,
+  SyncLogEntry,
+  Criterion,
+  CompetencyCard,
+} from "@/types";
 
 export const runtime = "nodejs";
 
@@ -140,9 +147,86 @@ function parseSheet(
   }
 
   return {
-    dept: { id: slugify(name), name, managerName: "", metrics },
+    dept: { id: slugify(name), name, managerName: "", type: "kpi", metrics },
     found: metrics.length,
     rating,
+  };
+}
+
+// Detect the 1–5 competency template (e.g. Accounting):
+// spreadsheet row 7 headers are # | Criterion | What 'Good'... | Weight | Score (1-5) | Weighted | Comments
+function isCompetencySheet(rows: any[][]): boolean {
+  const h = (rows[6] || []).map((c) => String(c ?? "").trim().toLowerCase());
+  return h[0] === "#" && h[1] === "criterion" && h[4]?.startsWith("score");
+}
+
+// Parse a 1–5 competency sheet into a CompetencyCard.
+// Section header rows (no #, no weight) set the current section.
+// Criterion rows have a numeric # in col A. The OVERALL / PERFORMANCE BAND
+// rows are captured for the summary.
+function parseCompetencySheet(
+  name: string,
+  rows: any[][]
+): { dept: Department; found: number } {
+  const criteria: Criterion[] = [];
+  let section = "";
+  let overall = 0;
+  let band = "";
+  let idx = 0;
+
+  for (let i = 7; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const a = String(row[0] ?? "").trim();
+    if (a === "") continue;
+
+    const upper = a.toUpperCase();
+    // Section headers, e.g. "OPERATIONAL PERFORMANCE — Section Weight: 40%"
+    if (upper.includes("SECTION WEIGHT")) {
+      section = a.split("—")[0].split("-")[0].trim();
+      continue;
+    }
+    if (upper.startsWith("OVERALL WEIGHTED SCORE")) {
+      overall = num(row[5]); // F column: out of 5.00
+      continue;
+    }
+    if (upper.startsWith("PERFORMANCE BAND")) {
+      band = String(row[5] ?? "").trim();
+      continue;
+    }
+    // Stop once we hit the rating-guide / how-to footer.
+    if (upper.startsWith("RATING GUIDE") || upper.startsWith("HOW TO USE")) break;
+    if (upper.startsWith("EMPLOYEE COMMENTS") || upper.startsWith("LEADER COMMENTS"))
+      continue;
+
+    // A criterion row has a numeric index in column A.
+    if (/^\d+$/.test(a)) {
+      const critName = String(row[1] ?? "").trim();
+      if (!critName) continue;
+      criteria.push({
+        id: `c_${slugify(name)}_${++idx}`,
+        number: a,
+        name: critName,
+        descriptor: String(row[2] ?? "").replace(/\\n/g, " ").trim(),
+        section,
+        weight: num(row[3]),
+        score: num(row[4]),
+        weighted: num(row[5]),
+        comments: String(row[6] ?? "").trim(),
+      });
+    }
+  }
+
+  const competency: CompetencyCard = { criteria, overall, band };
+  return {
+    dept: {
+      id: slugify(name),
+      name,
+      managerName: "",
+      type: "competency",
+      metrics: [],
+      competency,
+    },
+    found: criteria.length,
   };
 }
 
@@ -185,6 +269,16 @@ export async function POST(req: NextRequest) {
       // Standard template check: spreadsheet row 7 (index 6), col A == "Metric".
       const headerCell = String(rows[6]?.[0] ?? "").trim().toLowerCase();
       if (headerCell !== "metric") {
+        // Try the 1–5 competency template (e.g. Accounting) before skipping.
+        if (isCompetencySheet(rows)) {
+          const { dept, found } = parseCompetencySheet(sheetName, rows);
+          if (found > 0) {
+            const ref = adminDb().collection("departments").doc(dept.id);
+            batch.set(ref, dept);
+            log.push({ sheet: sheetName, metricsFound: found, status: "ok" });
+            continue;
+          }
+        }
         log.push({
           sheet: sheetName,
           metricsFound: 0,
