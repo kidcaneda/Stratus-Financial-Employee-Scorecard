@@ -34,3 +34,28 @@ export function newEmployeeId(name: string): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   return `emp_${slug}_${Date.now().toString(36)}`;
 }
+
+// ---- Phase C: save a dated monthly evaluation ----
+import { MonthlyEvaluation } from "@/types";
+
+export async function saveMonthlyEvaluation(
+  evaluation: MonthlyEvaluation
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return { ok: false, error: "You're not signed in." };
+    const res = await fetch("/api/evaluations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ evaluation }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || "Save failed." };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message || "Network error." };
+  }
+}
