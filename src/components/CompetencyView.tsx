@@ -56,7 +56,7 @@ export function CompetencyView({ dept }: { dept: Department }) {
         const sectionWeight = sec.items.reduce((s, i) => s + i.weight, 0);
         return (
           <div key={sec.name} className="card overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-paper px-4 py-2.5">
+            <div className="flex items-center justify-between border-b border-hairline bg-panel-2 px-4 py-2.5">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-ink">
                 {sec.name}
               </h3>
@@ -66,7 +66,7 @@ export function CompetencyView({ dept }: { dept: Department }) {
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-ink-muted">
+                <tr className="border-b border-hairline text-left text-xs uppercase tracking-wide text-ink-muted">
                   <th className="px-4 py-2 font-medium">#</th>
                   <th className="px-4 py-2 font-medium">Criterion</th>
                   <th className="px-4 py-2 text-right font-medium">Weight</th>
@@ -74,9 +74,9 @@ export function CompetencyView({ dept }: { dept: Department }) {
                   <th className="px-4 py-2 text-right font-medium">Weighted</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-hairline">
                 {sec.items.map((crit) => (
-                  <tr key={crit.id} className="hover:bg-paper">
+                  <tr key={crit.id} className="hover:bg-panel-2">
                     <td className="px-4 py-3 tabular-nums text-ink-muted">
                       {crit.number}
                     </td>
@@ -117,7 +117,7 @@ function ScorePips({ score }: { score: number }) {
           <span
             key={n}
             className={`h-2 w-2 rounded-full ${
-              n <= score ? "bg-ink" : "bg-slate-200"
+              n <= score ? "bg-ink" : "bg-hairline"
             }`}
           />
         ))}
