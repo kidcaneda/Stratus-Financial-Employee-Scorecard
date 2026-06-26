@@ -59,3 +59,27 @@ export async function saveMonthlyEvaluation(
     return { ok: false, error: e.message || "Network error." };
   }
 }
+
+// ---- Phase D: employee acknowledge / dispute ----
+export async function respondToEvaluation(opts: {
+  departmentId: string;
+  employeeId: string;
+  monthKey: string;
+  status: "acknowledged" | "disputed";
+  comment?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return { ok: false, error: "You're not signed in." };
+    const res = await fetch("/api/acknowledge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(opts),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || "Failed." };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message || "Network error." };
+  }
+}
