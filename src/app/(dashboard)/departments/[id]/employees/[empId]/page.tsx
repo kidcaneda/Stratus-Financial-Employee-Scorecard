@@ -5,14 +5,17 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useDepartments } from "@/hooks/useDepartments";
 import { useEmployees } from "@/hooks/useEmployees";
+import { useMonthlyEvaluations } from "@/hooks/useMonthlyEvaluations";
 import { scoreEmployee, scoreMetric, fmt } from "@/lib/scoring";
 import { Period } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
+import { MonthlyTrend } from "@/components/MonthlyTrend";
 
 export default function EmployeeDetailPage() {
   const { id, empId } = useParams<{ id: string; empId: string }>();
   const { departments } = useDepartments();
   const { employees, isMock, loading } = useEmployees(id);
+  const { months } = useMonthlyEvaluations(id, empId);
   const [period, setPeriod] = useState<Period>("monthly");
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
@@ -52,6 +55,9 @@ export default function EmployeeDetailPage() {
       </div>
 
       {isMock && <MockBanner />}
+
+      {/* Phase C: dated monthly time-series — trend + quarter/year rollups */}
+      <MonthlyTrend months={months} year={new Date().getFullYear()} />
 
       {/* Overall */}
       <div className="card flex items-center gap-6 p-6">
