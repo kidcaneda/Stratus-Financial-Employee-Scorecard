@@ -30,6 +30,10 @@ export interface Metric {
   actual: Record<Period, number>;
   // higher-is-better (true) vs lower-is-better (false, e.g. error rate)
   higherIsBetter: boolean;
+  // Pre-calculated 0–100 score per period, taken directly from the
+  // source workbook when present. The scoring engine prefers this over
+  // recomputing, because the sheet handles complex multi-period targets.
+  score?: Record<Period, number>;
 }
 
 // A department's full scorecard.
