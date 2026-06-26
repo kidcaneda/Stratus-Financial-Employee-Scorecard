@@ -116,3 +116,31 @@ export interface SyncLogEntry {
   status: "ok" | "skipped" | "error";
   message?: string;
 }
+
+// ============================================================
+// Phase B: write-path types (manager input, audit, assignments)
+// ============================================================
+
+// An audit record written on every evaluation create/update. Immutable
+// once written; provides the "who changed what, when" trail required for
+// a system that holds HR evaluation data.
+export interface AuditEntry {
+  id: string;
+  action: "create_employee" | "update_employee" | "save_evaluation";
+  actorUid: string; // who performed the write
+  actorName: string;
+  departmentId: string;
+  employeeId: string;
+  employeeName: string;
+  period?: Period; // for evaluation saves
+  timestamp: number; // epoch millis
+  summary: string; // human-readable description
+}
+
+// Maps a manager (by uid) to the departments they may write to. Stored in
+// Firestore `assignments/{uid}`. Editable in-app by an admin.
+export interface ManagerAssignment {
+  uid: string;
+  managerName: string;
+  departmentIds: string[];
+}
