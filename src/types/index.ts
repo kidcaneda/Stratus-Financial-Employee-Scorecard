@@ -166,6 +166,9 @@ export interface MonthlyMetricEntry {
   score: number; // 0–100 score recorded that month
 }
 
+// Employee response to an evaluation (Phase D).
+export type AckStatus = "pending" | "acknowledged" | "disputed";
+
 // A full monthly evaluation snapshot for one employee.
 // Stored at departments/{deptId}/employees/{empId}/months/{monthKey}.
 export interface MonthlyEvaluation {
@@ -176,9 +179,10 @@ export interface MonthlyEvaluation {
   recordedBy: string; // actor uid
   recordedByName: string;
   recordedAt: number; // epoch millis
-  // Employee acknowledgement (Phase D will use these).
-  acknowledged?: boolean;
+  // Phase D: employee acknowledgement / dispute flow.
+  ackStatus?: AckStatus; // defaults to "pending" on creation
   employeeComment?: string;
+  ackAt?: number; // when the employee responded
 }
 
 // Quarter identifier: 1–4.
