@@ -41,13 +41,13 @@ export default function TeamPage() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search departments…"
-        className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="w-full max-w-xs rounded-lg border border-hairline bg-panel-2 text-ink px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
       />
 
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-paper text-left text-xs uppercase tracking-wide text-ink-muted">
+            <tr className="border-b border-hairline bg-panel-2 text-left text-xs uppercase tracking-wide text-ink-muted">
               <th className="px-4 py-3 font-medium">Department</th>
               <th className="px-4 py-3 font-medium">Manager</th>
               <th className="px-4 py-3 text-right font-medium">Score</th>
@@ -56,9 +56,9 @@ export default function TeamPage() {
               <th className="px-4 py-3 text-right font-medium"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-hairline">
             {rows.map((r) => (
-              <tr key={r.id} className="hover:bg-paper">
+              <tr key={r.id} className="hover:bg-panel-2">
                 <td className="px-4 py-3 font-medium text-ink">{r.name}</td>
                 <td className="px-4 py-3 text-ink-muted">{r.manager}</td>
                 <td className="px-4 py-3 text-right tabular-nums text-ink">
