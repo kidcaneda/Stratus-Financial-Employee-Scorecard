@@ -44,6 +44,23 @@ export interface CompetencyCard {
   band: string; // "Outstanding", "Exceeds", "Meets", etc.
 }
 
+// ============================================================
+// Phase A: Employee entity. A department holds zero, one, or many
+// employees; each employee carries their own scorecard data in the
+// same shape as the department template (KPI metrics or competency).
+// ============================================================
+export interface Employee {
+  id: string;
+  name: string;
+  email: string; // used later for evaluation notifications
+  departmentId: string;
+  role: string; // job title / role within the department
+  evaluatorName: string; // the manager who evaluates this person
+  type: ScorecardType; // "kpi" or "competency", mirrors the department
+  metrics: Metric[]; // populated when type === "kpi"
+  competency?: CompetencyCard; // populated when type === "competency"
+}
+
 // One measurable line item on a scorecard.
 export interface Metric {
   id: string;
@@ -62,14 +79,18 @@ export interface Metric {
 }
 
 // A department's full scorecard. Either a KPI card (metrics) or a
-// competency card (criteria), distinguished by `type`.
+// competency card (criteria), distinguished by `type`. May also hold
+// individual employees (Phase A) loaded from a subcollection.
 export interface Department {
   id: string;
   name: string;
   managerName: string;
+  evaluatorName?: string; // the designated evaluator (from the workbook POC)
+  employeeCount?: number; // number of employees in the subcollection
   type: ScorecardType; // "kpi" (default) or "competency"
   metrics: Metric[]; // populated when type === "kpi"
   competency?: CompetencyCard; // populated when type === "competency"
+  employees?: Employee[]; // hydrated client-side when needed
 }
 
 // Computed score result for a metric or department in one period.
