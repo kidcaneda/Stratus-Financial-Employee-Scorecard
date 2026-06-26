@@ -30,9 +30,9 @@ export function Sidebar() {
   const items = NAV.filter((i) => i.roles.includes(role));
 
   return (
-    <aside className="flex h-screen w-60 flex-col border-r border-slate-200 bg-white">
+    <aside className="flex h-screen w-60 flex-col border-r border-hairline bg-panel">
       <div className="flex items-center gap-2 px-5 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink text-white">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white">
           <span className="font-display text-sm">S</span>
         </div>
         <div className="leading-tight">
@@ -51,8 +51,8 @@ export function Sidebar() {
               href={item.href}
               className={`relative block rounded-lg px-3 py-2 text-sm transition-all duration-150 ${
                 active
-                  ? "bg-paper font-medium text-ink"
-                  : "text-ink-muted hover:bg-paper hover:text-ink"
+                  ? "bg-panel-2 font-medium text-ink"
+                  : "text-ink-muted hover:bg-panel-2 hover:text-ink"
               }`}
             >
               {active && (
@@ -64,7 +64,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-slate-200 p-3">
+      <div className="border-t border-hairline p-3">
         <div className="mb-2 px-2">
           <div className="truncate text-sm font-medium text-ink">
             {user?.displayName || "—"}
