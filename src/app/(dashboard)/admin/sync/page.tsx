@@ -59,7 +59,7 @@ export default function SyncPage() {
       </div>
 
       <div
-        className="card flex flex-col items-center justify-center gap-3 border-2 border-dashed border-slate-200 p-10 text-center"
+        className="card flex flex-col items-center justify-center gap-3 border-2 border-dashed border-hairline p-10 text-center"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
@@ -90,11 +90,11 @@ export default function SyncPage() {
 
       {log.length > 0 && (
         <div className="card overflow-hidden">
-          <div className="border-b border-slate-200 bg-paper px-4 py-2 text-xs uppercase tracking-wide text-ink-muted">
+          <div className="border-b border-hairline bg-panel-2 px-4 py-2 text-xs uppercase tracking-wide text-ink-muted">
             Sync log
           </div>
           <table className="w-full text-sm">
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-hairline">
               {log.map((entry, i) => (
                 <tr key={i}>
                   <td className="px-4 py-2 font-medium text-ink">{entry.sheet}</td>
