@@ -127,3 +127,39 @@ export function trendDelta(dept: Department): number {
   const q = scoreDepartment(dept, "quarterly").raw;
   return m - q;
 }
+
+// ============================================================
+// Phase A: employee-level scoring.
+// An Employee scores exactly like a Department (same metric/competency
+// shape), so we adapt it into the existing scoreDepartment logic.
+// ============================================================
+import { Employee } from "@/types";
+
+// Score a single employee for a period (0–100). Mirrors scoreDepartment.
+export function scoreEmployee(emp: Employee, period: Period): ScoreResult {
+  if (emp.type === "competency" && emp.competency) {
+    const raw = (emp.competency.overall / 5) * 100;
+    return { raw, weighted: raw, status: competencyStatus(emp.competency.overall) };
+  }
+  const totalWeight = emp.metrics.reduce((s, m) => s + m.weight, 0) || 1;
+  const weighted = emp.metrics.reduce(
+    (s, m) => s + metricAttainment(m, period) * m.weight,
+    0
+  );
+  const raw = weighted / totalWeight;
+  return { raw, weighted: raw, status: statusFor(raw) };
+}
+
+// Roll a department's employees up into a single averaged score for a
+// period. Used when a department has employees; if it has none, callers
+// fall back to scoreDepartment (the template's own numbers).
+export function rollupEmployees(
+  employees: Employee[],
+  period: Period
+): ScoreResult {
+  if (employees.length === 0) return { raw: 0, weighted: 0, status: "red" };
+  const avg =
+    employees.reduce((s, e) => s + scoreEmployee(e, period).raw, 0) /
+    employees.length;
+  return { raw: avg, weighted: avg, status: statusFor(avg) };
+}
