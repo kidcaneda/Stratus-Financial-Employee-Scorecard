@@ -47,7 +47,7 @@ export default function MyScorecardPage() {
             {(["monthly", "quarterly", "yearly"] as Period[]).map((p) => {
               const r = scoreDepartment(dept, p);
               return (
-                <div key={p} className="rounded-lg bg-paper p-3 text-center">
+                <div key={p} className="rounded-lg bg-panel-2 p-3 text-center">
                   <div className="text-xs uppercase tracking-wide text-ink-muted">
                     {p}
                   </div>
@@ -64,7 +64,7 @@ export default function MyScorecardPage() {
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-paper text-left text-xs uppercase tracking-wide text-ink-muted">
+            <tr className="border-b border-hairline bg-panel-2 text-left text-xs uppercase tracking-wide text-ink-muted">
               <th className="px-4 py-3 font-medium">Metric</th>
               <th className="px-4 py-3 text-right font-medium">Target</th>
               <th className="px-4 py-3 text-right font-medium">Actual</th>
@@ -72,11 +72,11 @@ export default function MyScorecardPage() {
               <th className="px-4 py-3 text-right font-medium">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-hairline">
             {dept.metrics.map((m) => {
               const res = scoreMetric(m, period);
               return (
-                <tr key={m.id} className="hover:bg-paper">
+                <tr key={m.id} className="hover:bg-panel-2">
                   <td className="px-4 py-3 font-medium text-ink">{m.name}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {fmt(m.target, 1)} {m.unit}
