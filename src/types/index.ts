@@ -59,6 +59,9 @@ export interface Employee {
   type: ScorecardType; // "kpi" or "competency", mirrors the department
   metrics: Metric[]; // populated when type === "kpi"
   competency?: CompetencyCard; // populated when type === "competency"
+  // Phase D/E: links this employee record to a Firebase Auth account so
+  // the person can log in and see/acknowledge only their own evaluations.
+  linkedUid?: string;
 }
 
 // One measurable line item on a scorecard.
