@@ -49,12 +49,15 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`block rounded-lg px-3 py-2 text-sm transition ${
+              className={`relative block rounded-lg px-3 py-2 text-sm transition-all duration-150 ${
                 active
                   ? "bg-paper font-medium text-ink"
                   : "text-ink-muted hover:bg-paper hover:text-ink"
               }`}
             >
+              {active && (
+                <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-accent" />
+              )}
               {item.label}
             </Link>
           );
