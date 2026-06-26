@@ -7,13 +7,19 @@ export const runtime = "nodejs";
 
 // ============================================================
 // POST /api/sync
-// Parses an uploaded Stratus scorecard .xlsx and writes each
-// sheet to Firestore as a department document with metrics.
+// Parses the Stratus scorecard .xlsx and writes each department
+// sheet to Firestore. Matches the REAL workbook layout:
+//   - Rows 1-6: title / employee / instructions (ignored)
+//   - Row 7:    headers  Metric | Target | Weight | Norm.Wt | Unit | MONTHLY | (gap) | QUARTERLY | (gap) | YEARLY
+//   - Row 8:    sub-headers Actual | Score (each period spans 2 cols)
+//   - Row 9+:   metric rows, until a WEIGHTED SCORE / RATING row
 //
-// Security: requires a valid Firebase ID token whose custom
-// claim role === "admin". The Admin SDK then writes data,
-// bypassing client Firestore rules (which is intended — only
-// this verified server path may seed).
+// Column map (1-indexed): A=Metric B=Target C=Weight D=Norm.Wt
+//   E=Unit  F=Mon.Actual G=Mon.Score  H=Qtr.Actual I=Qtr.Score
+//   J=Yr.Actual K=Yr.Score
+//
+// Only sheets whose A7 == "Metric" are treated as departments.
+// Index, Data Analytics, and Accounting use other formats → skipped.
 // ============================================================
 
 type AdminCheck = { ok: true; uid: string } | { ok: false; reason: string };
@@ -21,8 +27,6 @@ type AdminCheck = { ok: true; uid: string } | { ok: false; reason: string };
 async function requireAdmin(req: NextRequest): Promise<AdminCheck> {
   const header = req.headers.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-
-  // Cause 1: no token reached the server.
   if (!token) {
     return {
       ok: false,
@@ -30,31 +34,25 @@ async function requireAdmin(req: NextRequest): Promise<AdminCheck> {
         "No auth token was sent with the request. The client isn't attaching your session token — try a fresh sign-in.",
     };
   }
-
   try {
     const decoded = await adminAuth().verifyIdToken(token);
-
-    // Cause 3: token is valid, but the role custom claim isn't "admin".
     if (decoded.role !== "admin") {
       return {
         ok: false,
         reason: `Your token is valid, but its role claim is "${
           decoded.role ?? "undefined"
-        }", not "admin". This means the admin custom claim isn't on your token yet. Re-run set-role.ts against the SAME Firebase project this deployment uses, then sign out and back in.`,
+        }", not "admin". Re-run set-role.ts against the SAME Firebase project this deployment uses, then sign out and back in.`,
       };
     }
-
     return { ok: true, uid: decoded.uid };
   } catch (e: any) {
-    // Cause 2: verification itself failed (wrong project, bad key, expired).
     return {
       ok: false,
-      reason: `Token verification failed: ${e.message}. The most common cause is that Vercel's FIREBASE_ADMIN_* env vars point at a different Firebase project than the one your login token came from, or the private key's \\n escaping is broken.`,
+      reason: `Token verification failed: ${e.message}. Most commonly the FIREBASE_ADMIN_* env vars point at a different Firebase project, or the private key's \\n escaping is broken.`,
     };
   }
 }
 
-// Convert a sheet name into a stable, URL-safe department id.
 function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -62,56 +60,89 @@ function slugify(name: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-// Parse a single worksheet into a Department. This is a tolerant
-// parser: it expects columns it can recognize and skips the rest.
-// EXPECTED COLUMNS (case-insensitive, flexible order):
-//   Metric | Target | Unit | Weight | Monthly | Quarterly | Yearly
-// Adjust the header matching here to fit the real workbook layout.
-function parseSheet(name: string, rows: any[]): { dept: Department; found: number } {
+// Pull the first number out of a target string like "≥ 95%" or
+// "Monthly: ≥ 1,000,000\nQuarterly: ≥ 3,000,000" → 95 / 1000000.
+function parseTarget(raw: any): number {
+  if (raw === null || raw === undefined) return 0;
+  const m = String(raw).match(/-?\d[\d,]*\.?\d*/);
+  return m ? Number(m[0].replace(/,/g, "")) : 0;
+}
+
+function num(v: any): number {
+  const n = Number(String(v ?? "").replace(/[^0-9.\-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
+// Rows whose metric-name cell signals the end of the metric list.
+const STOP_ROWS = ["weighted score", "rating"];
+
+// Parse one standard-template worksheet (array-of-arrays form).
+function parseSheet(
+  name: string,
+  rows: any[][]
+): { dept: Department; found: number; rating?: Record<Period, string> } {
   const metrics: Metric[] = [];
   let idx = 0;
 
-  for (const row of rows) {
-    // Normalize keys to lowercase for tolerant matching.
-    const r: Record<string, any> = {};
-    for (const k of Object.keys(row)) r[k.toLowerCase().trim()] = row[k];
+  // Data starts at row index 8 (0-based) == spreadsheet row 9.
+  for (let i = 8; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const rawName = row[0];
+    if (rawName === undefined || rawName === null || String(rawName).trim() === "")
+      continue;
 
-    const metricName = r["metric"] ?? r["kpi"] ?? r["measure"];
-    if (!metricName) continue;
+    const lower = String(rawName).trim().toLowerCase();
+    if (STOP_ROWS.some((s) => lower.startsWith(s))) break;
 
-    const num = (v: any) => {
-      const n = Number(String(v ?? "").replace(/[^0-9.\-]/g, ""));
-      return isNaN(n) ? 0 : n;
-    };
+    const target = parseTarget(row[1]); // B
+    const weightRaw = num(row[2]); // C (already 0–1 in this workbook)
+    const unit = String(row[4] ?? ""); // E
 
+    // Each period: Actual then Score. Score is already 0–100 in the sheet.
     const actual: Record<Period, number> = {
-      monthly: num(r["monthly"] ?? r["month"] ?? r["actual"]),
-      quarterly: num(r["quarterly"] ?? r["quarter"]),
-      yearly: num(r["yearly"] ?? r["year"] ?? r["annual"]),
+      monthly: num(row[5]), // F
+      quarterly: num(row[7]), // H
+      yearly: num(row[9]), // J
+    };
+    const score: Record<Period, number> = {
+      monthly: num(row[6]), // G
+      quarterly: num(row[8]), // I
+      yearly: num(row[10]), // K
     };
 
     metrics.push({
       id: `m_${slugify(name)}_${++idx}`,
-      name: String(metricName),
-      target: num(r["target"] ?? r["goal"]),
-      unit: String(r["unit"] ?? ""),
-      weight: num(r["weight"]) > 1 ? num(r["weight"]) / 100 : num(r["weight"]),
-      higherIsBetter:
-        String(r["direction"] ?? "higher").toLowerCase().startsWith("low")
-          ? false
-          : true,
+      name: String(rawName).replace(/\\n/g, " ").replace(/\s+/g, " ").trim(),
+      target,
+      unit,
+      weight: weightRaw > 1 ? weightRaw / 100 : weightRaw,
+      higherIsBetter: !/(rework|error|discrepancy|dormant|turnaround|cost|time to)/i.test(
+        String(rawName)
+      ),
       actual,
-    });
+      // Pre-calculated scores from the sheet, used directly by the app.
+      score,
+    } as Metric & { score: Record<Period, number> });
+  }
+
+  // Capture the sheet's own RATING row (GREEN/AMBER/RED) if present.
+  let rating: Record<Period, string> | undefined;
+  for (let i = 8; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (String(row[0] ?? "").trim().toLowerCase().startsWith("rating")) {
+      rating = {
+        monthly: String(row[6] ?? ""),
+        quarterly: String(row[8] ?? ""),
+        yearly: String(row[10] ?? ""),
+      };
+      break;
+    }
   }
 
   return {
-    dept: {
-      id: slugify(name),
-      name,
-      managerName: "",
-      metrics,
-    },
+    dept: { id: slugify(name), name, managerName: "", metrics },
     found: metrics.length,
+    rating,
   };
 }
 
@@ -144,11 +175,33 @@ export async function POST(req: NextRequest) {
   for (const sheetName of workbook.SheetNames) {
     try {
       const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-      const { dept, found } = parseSheet(sheetName, rows);
+      // Array-of-arrays so we can address fixed columns regardless of headers.
+      const rows = XLSX.utils.sheet_to_json<any[]>(sheet, {
+        header: 1,
+        defval: "",
+        blankrows: true,
+      });
 
+      // Standard template check: spreadsheet row 7 (index 6), col A == "Metric".
+      const headerCell = String(rows[6]?.[0] ?? "").trim().toLowerCase();
+      if (headerCell !== "metric") {
+        log.push({
+          sheet: sheetName,
+          metricsFound: 0,
+          status: "skipped",
+          message: "Not a standard scorecard sheet (different template).",
+        });
+        continue;
+      }
+
+      const { dept, found } = parseSheet(sheetName, rows);
       if (found === 0) {
-        log.push({ sheet: sheetName, metricsFound: 0, status: "skipped", message: "No recognizable metrics." });
+        log.push({
+          sheet: sheetName,
+          metricsFound: 0,
+          status: "skipped",
+          message: "No metric rows found.",
+        });
         continue;
       }
 
@@ -156,7 +209,12 @@ export async function POST(req: NextRequest) {
       batch.set(ref, dept);
       log.push({ sheet: sheetName, metricsFound: found, status: "ok" });
     } catch (e: any) {
-      log.push({ sheet: sheetName, metricsFound: 0, status: "error", message: e.message });
+      log.push({
+        sheet: sheetName,
+        metricsFound: 0,
+        status: "error",
+        message: e.message,
+      });
     }
   }
 
@@ -170,4 +228,3 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, log });
-}
