@@ -15,6 +15,7 @@ import { useDepartments } from "@/hooks/useDepartments";
 import { scoreDepartment, statusFor, fmt } from "@/lib/scoring";
 import { Period } from "@/types";
 import { PeriodSelector, StatusPill, MockBanner } from "@/components/ui";
+import { CountUp } from "@/components/CountUp";
 
 export default function OverviewPage() {
   const { departments, isMock, loading } = useDepartments();
@@ -56,7 +57,7 @@ export default function OverviewPage() {
       {isMock && <MockBanner />}
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="stagger grid grid-cols-2 gap-4 sm:grid-cols-4">
         <KpiCard label="Avg. score" value={fmt(avg, 0)} sub="weighted" tone="ink" />
         <KpiCard label="On track" value={String(counts.green)} sub="green" tone="green" />
         <KpiCard label="At risk" value={String(counts.amber)} sub="amber" tone="amber" />
@@ -135,11 +136,15 @@ function KpiCard({
       : tone === "red"
       ? "text-signal-red"
       : "text-ink";
+  const numeric = Number(value);
   return (
-    <div className="card p-4">
+    <div className="card p-4 transition-shadow duration-200 hover:shadow-lift">
       <div className="text-xs uppercase tracking-wide text-ink-muted">{label}</div>
-      <div className={`mt-1 text-3xl font-semibold tabular-nums ${toneText}`}>{value}</div>
-      <div className="text-xs text-ink-muted">{sub}</div>
+      <div className={`mt-1 text-3xl font-semibold tabular-nums ${toneText}`}>
+        {isNaN(numeric) ? value : <CountUp value={numeric} />}
+      </div>
+      <div className="mt-1.5 rule-brass" />
+      <div className="mt-1.5 text-xs text-ink-muted">{sub}</div>
     </div>
   );
 }
