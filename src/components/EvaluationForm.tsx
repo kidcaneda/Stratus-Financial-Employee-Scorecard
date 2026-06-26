@@ -134,7 +134,7 @@ export function EvaluationForm({
           <select
             value={month}
             onChange={(e) => setMonth(Number(e.target.value))}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            className="rounded-lg border border-hairline bg-panel-2 text-ink px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
           >
             {MONTH_NAMES.map((mn, i) => (
               <option key={mn} value={i + 1}>{mn}</option>
@@ -146,7 +146,7 @@ export function EvaluationForm({
           <select
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            className="rounded-lg border border-hairline bg-panel-2 text-ink px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
           >
             {years.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -159,17 +159,17 @@ export function EvaluationForm({
       </div>
 
       {/* Metric entry */}
-      <div className="overflow-hidden rounded-lg border border-slate-200">
+      <div className="overflow-hidden rounded-lg border border-hairline">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-paper text-left text-xs uppercase tracking-wide text-ink-muted">
+            <tr className="border-b border-hairline bg-panel-2 text-left text-xs uppercase tracking-wide text-ink-muted">
               <th className="px-3 py-2 font-medium">Metric</th>
               <th className="px-3 py-2 text-right font-medium">Target</th>
               <th className="px-3 py-2 text-right font-medium">Actual</th>
               <th className="px-3 py-2 text-right font-medium">Score (0–100)</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-hairline">
             {rows.map((r, i) => (
               <tr key={r.metricId}>
                 <td className="px-3 py-2 font-medium text-ink">{r.metricName}</td>
@@ -181,7 +181,7 @@ export function EvaluationForm({
                     type="number"
                     value={r.actual || ""}
                     onChange={(e) => setRow(i, "actual", Number(e.target.value))}
-                    className="w-24 rounded border border-slate-200 px-2 py-1 text-right tabular-nums focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+                    className="w-24 rounded border border-hairline bg-panel-2 text-ink px-2 py-1 text-right tabular-nums focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
                   />
                 </td>
                 <td className="px-3 py-2 text-right">
@@ -191,7 +191,7 @@ export function EvaluationForm({
                     max={100}
                     value={r.score || ""}
                     onChange={(e) => setRow(i, "score", Number(e.target.value))}
-                    className="w-24 rounded border border-slate-200 px-2 py-1 text-right tabular-nums focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+                    className="w-24 rounded border border-hairline bg-panel-2 text-ink px-2 py-1 text-right tabular-nums focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
                   />
                 </td>
               </tr>
@@ -230,7 +230,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="w-full rounded-lg border border-hairline bg-panel-2 text-ink px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
       />
     </div>
   );
