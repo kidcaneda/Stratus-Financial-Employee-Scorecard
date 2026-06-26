@@ -19,8 +19,15 @@ export function statusFor(
 }
 
 // Attainment of a single metric vs its target (0–100, capped at 100).
-// For "lower is better" metrics (e.g. error rate), the formula inverts.
+// If the source sheet supplied a pre-calculated score, use it directly
+// (it correctly handles complex multi-period targets). Otherwise compute
+// from actual vs target. For "lower is better" metrics, the formula inverts.
 export function metricAttainment(metric: Metric, period: Period): number {
+  // Prefer the workbook's own score when available.
+  if (metric.score && typeof metric.score[period] === "number") {
+    const s = metric.score[period];
+    if (s > 0) return Math.max(0, Math.min(100, s));
+  }
   const actual = metric.actual[period];
   if (metric.target === 0) return 0;
   let raw: number;
