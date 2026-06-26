@@ -144,3 +144,50 @@ export interface ManagerAssignment {
   managerName: string;
   departmentIds: string[];
 }
+
+// ============================================================
+// Phase C: dated monthly time-series.
+// Instead of one overwritten "monthly" number, each month's evaluation
+// is its own record. Quarterly/yearly are COMPUTED by averaging the
+// relevant months, never typed.
+// ============================================================
+
+// A year-month key, e.g. "2026-01". Sortable as a string.
+export type MonthKey = string;
+
+// One metric's recorded value for a single month.
+export interface MonthlyMetricEntry {
+  metricId: string;
+  metricName: string;
+  target: number;
+  unit: string;
+  weight: number;
+  actual: number; // the actual recorded that month
+  score: number; // 0–100 score recorded that month
+}
+
+// A full monthly evaluation snapshot for one employee.
+// Stored at departments/{deptId}/employees/{empId}/months/{monthKey}.
+export interface MonthlyEvaluation {
+  monthKey: MonthKey; // "2026-01"
+  employeeId: string;
+  departmentId: string;
+  entries: MonthlyMetricEntry[];
+  recordedBy: string; // actor uid
+  recordedByName: string;
+  recordedAt: number; // epoch millis
+  // Employee acknowledgement (Phase D will use these).
+  acknowledged?: boolean;
+  employeeComment?: string;
+}
+
+// Quarter identifier: 1–4.
+export type Quarter = 1 | 2 | 3 | 4;
+
+// The three months that compose each quarter (1-indexed month numbers).
+export const QUARTER_MONTHS: Record<Quarter, number[]> = {
+  1: [1, 2, 3],
+  2: [4, 5, 6],
+  3: [7, 8, 9],
+  4: [10, 11, 12],
+};
