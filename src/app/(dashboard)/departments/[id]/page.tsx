@@ -87,7 +87,7 @@ export default function DepartmentDetailPage() {
       {/* Employee roster (Phase A). Shown when the department has people. */}
       {employees.length > 0 && (
         <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-paper px-4 py-2.5">
+          <div className="flex items-center justify-between border-b border-hairline bg-panel-2 px-4 py-2.5">
             <h3 className="text-sm font-semibold text-ink">
               Employees ({employees.length})
             </h3>
@@ -97,7 +97,7 @@ export default function DepartmentDetailPage() {
           </div>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-ink-muted">
+              <tr className="border-b border-hairline text-left text-xs uppercase tracking-wide text-ink-muted">
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Role</th>
                 <th className="px-4 py-2 text-right font-medium">Score</th>
@@ -105,12 +105,12 @@ export default function DepartmentDetailPage() {
                 <th className="px-4 py-2 text-right font-medium"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-hairline">
               {employees
                 .map((e) => ({ e, res: scoreEmployee(e, period) }))
                 .sort((a, b) => b.res.raw - a.res.raw)
                 .map(({ e, res }) => (
-                  <tr key={e.id} className="hover:bg-paper">
+                  <tr key={e.id} className="hover:bg-panel-2">
                     <td className="px-4 py-3 font-medium text-ink">{e.name}</td>
                     <td className="px-4 py-3 text-ink-muted">{e.role}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">
@@ -150,7 +150,7 @@ export default function DepartmentDetailPage() {
         <div className="card p-5">
           <h3 className="mb-2 text-sm font-semibold text-ink">Manager comments</h3>
           <textarea
-            className="h-24 w-full resize-none rounded-lg border border-slate-200 p-3 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            className="h-24 w-full resize-none rounded-lg border border-hairline p-3 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
             placeholder="Add notes for this review period…"
           />
         </div>
@@ -195,7 +195,7 @@ function KpiView({
       <div className="card overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-paper text-left text-xs uppercase tracking-wide text-ink-muted">
+            <tr className="border-b border-hairline bg-panel-2 text-left text-xs uppercase tracking-wide text-ink-muted">
               <th className="px-4 py-3 font-medium">Metric</th>
               <th className="px-4 py-3 text-right font-medium">Target</th>
               <th className="px-4 py-3 text-right font-medium">Actual</th>
@@ -204,11 +204,11 @@ function KpiView({
               <th className="px-4 py-3 text-right font-medium">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-hairline">
             {dept.metrics.map((m) => {
               const res = scoreMetric(m, period);
               return (
-                <tr key={m.id} className="hover:bg-paper">
+                <tr key={m.id} className="hover:bg-panel-2">
                   <td className="px-4 py-3 font-medium text-ink">{m.name}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {fmt(m.target, 1)} {m.unit}
@@ -238,7 +238,7 @@ function KpiView({
 function SignLine({ label }: { label: string }) {
   return (
     <div>
-      <div className="h-8 border-b border-slate-300" />
+      <div className="h-8 border-b border-hairline" />
       <div className="mt-1 text-xs text-ink-muted">{label}</div>
     </div>
   );
