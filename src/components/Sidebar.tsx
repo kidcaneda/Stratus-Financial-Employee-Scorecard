@@ -15,6 +15,7 @@ const NAV: NavItem[] = [
   { label: "Overview", href: "/dashboard", roles: ["admin", "manager", "employee"] },
   { label: "Departments", href: "/departments", roles: ["admin", "manager"] },
   { label: "My Scorecard", href: "/scorecard", roles: ["admin", "manager", "employee"] },
+  { label: "My Evaluations", href: "/my-evaluations", roles: ["admin", "manager", "employee"] },
   { label: "Team View", href: "/team", roles: ["admin", "manager"] },
   { label: "Excel Sync", href: "/admin/sync", roles: ["admin"] },
   { label: "Settings", href: "/settings", roles: ["admin"] },
