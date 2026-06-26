@@ -57,7 +57,10 @@ export default function DepartmentsPage() {
                 />
               </div>
               <div className="mt-3 text-xs text-ink-muted">
-                {d.metrics.length} metrics · {d.managerName}
+                {d.type === "competency"
+                  ? `${d.competency?.criteria.length ?? 0} criteria · 1–5 scale`
+                  : `${d.metrics.length} metrics`}{" "}
+                · {d.managerName}
               </div>
             </Link>
           );
