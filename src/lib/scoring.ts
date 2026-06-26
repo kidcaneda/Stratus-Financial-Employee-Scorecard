@@ -18,6 +18,15 @@ export function statusFor(
   return "red";
 }
 
+// Map a 1–5 competency overall score to the same Green/Amber/Red signal.
+//  >= 4.0 → green (Exceeds/Outstanding), >= 3.0 → amber (Meets),
+//  below 3.0 → red (Needs Improvement / Unsatisfactory).
+export function competencyStatus(overall: number): Status {
+  if (overall >= 4.0) return "green";
+  if (overall >= 3.0) return "amber";
+  return "red";
+}
+
 // Attainment of a single metric vs its target (0–100, capped at 100).
 // If the source sheet supplied a pre-calculated score, use it directly
 // (it correctly handles complex multi-period targets). Otherwise compute
@@ -56,6 +65,13 @@ export function scoreDepartment(
   period: Period,
   thresholds: Thresholds = DEFAULT_THRESHOLDS
 ): ScoreResult {
+  // Competency departments use a 1–5 scale. For cross-department comparison
+  // on the overview/list (which are 0–100), convert to an equivalent 0–100
+  // (e.g. 5.0/5 → 100). The detail page still shows the native 1–5 value.
+  if (dept.type === "competency" && dept.competency) {
+    const raw = (dept.competency.overall / 5) * 100;
+    return { raw, weighted: raw, status: competencyStatus(dept.competency.overall) };
+  }
   const totalWeight = dept.metrics.reduce((s, m) => s + m.weight, 0) || 1;
   const weighted = dept.metrics.reduce(
     (s, m) => s + metricAttainment(m, period) * m.weight,
