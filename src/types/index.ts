@@ -9,6 +9,11 @@ export type Period = "monthly" | "quarterly" | "yearly";
 
 export type Status = "green" | "amber" | "red";
 
+// Two scorecard formats exist in the source workbook:
+//  - "kpi":        the standard 0–100, multi-period (monthly/quarterly/yearly) model
+//  - "competency": a 1–5 rating review with weighted criteria and a band label
+export type ScorecardType = "kpi" | "competency";
+
 // A single user record (mirrors Firebase Auth + Firestore `users` doc)
 export interface AppUser {
   uid: string;
@@ -17,6 +22,26 @@ export interface AppUser {
   role: Role;
   // departmentId the user belongs to (managers/employees). Admins: null.
   departmentId: string | null;
+}
+
+// One criterion on a 1–5 competency scorecard.
+export interface Criterion {
+  id: string;
+  number: string; // "1", "2", ... as shown in the sheet
+  name: string; // the criterion label
+  descriptor: string; // "What 'Good' Looks Like" text
+  section: string; // "Operational Performance", "Behavioral", "Goals"
+  weight: number; // 0–1
+  score: number; // 1–5 raw rating
+  weighted: number; // weight * score, as pre-calculated in the sheet
+  comments: string;
+}
+
+// A 1–5 competency scorecard (e.g. Accounting). Single-period review.
+export interface CompetencyCard {
+  criteria: Criterion[];
+  overall: number; // overall weighted score, out of 5.00
+  band: string; // "Outstanding", "Exceeds", "Meets", etc.
 }
 
 // One measurable line item on a scorecard.
@@ -36,12 +61,15 @@ export interface Metric {
   score?: Record<Period, number>;
 }
 
-// A department's full scorecard.
+// A department's full scorecard. Either a KPI card (metrics) or a
+// competency card (criteria), distinguished by `type`.
 export interface Department {
   id: string;
   name: string;
   managerName: string;
-  metrics: Metric[];
+  type: ScorecardType; // "kpi" (default) or "competency"
+  metrics: Metric[]; // populated when type === "kpi"
+  competency?: CompetencyCard; // populated when type === "competency"
 }
 
 // Computed score result for a metric or department in one period.
