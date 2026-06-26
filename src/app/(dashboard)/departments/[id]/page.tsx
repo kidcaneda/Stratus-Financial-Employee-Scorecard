@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useDepartments } from "@/hooks/useDepartments";
-import { scoreDepartment, scoreMetric, fmt } from "@/lib/scoring";
+import { useEmployees } from "@/hooks/useEmployees";
+import { scoreDepartment, scoreMetric, scoreEmployee, fmt } from "@/lib/scoring";
 import { Period } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
 import { CompetencyView } from "@/components/CompetencyView";
@@ -12,6 +13,7 @@ import { CompetencyView } from "@/components/CompetencyView";
 export default function DepartmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { departments, isMock, loading } = useDepartments();
+  const { employees } = useEmployees(id);
   const [period, setPeriod] = useState<Period>("monthly");
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
@@ -37,13 +39,67 @@ export default function DepartmentDetailPage() {
             ← Departments
           </Link>
           <h1 className="mt-1 text-2xl font-semibold text-ink">{dept.name}</h1>
-          <p className="text-sm text-ink-muted">{dept.managerName}</p>
+          <p className="text-sm text-ink-muted">
+            {dept.evaluatorName
+              ? `Evaluator: ${dept.evaluatorName}`
+              : dept.managerName}
+          </p>
         </div>
         {/* Period selector only applies to multi-period KPI scorecards. */}
         {!isCompetency && <PeriodSelector value={period} onChange={setPeriod} />}
       </div>
 
       {isMock && <MockBanner />}
+
+      {/* Employee roster (Phase A). Shown when the department has people. */}
+      {employees.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-paper px-4 py-2.5">
+            <h3 className="text-sm font-semibold text-ink">
+              Employees ({employees.length})
+            </h3>
+            <span className="text-xs text-ink-muted">
+              Individual scorecards
+            </span>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-ink-muted">
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Role</th>
+                <th className="px-4 py-2 text-right font-medium">Score</th>
+                <th className="px-4 py-2 text-right font-medium">Status</th>
+                <th className="px-4 py-2 text-right font-medium"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {employees
+                .map((e) => ({ e, res: scoreEmployee(e, period) }))
+                .sort((a, b) => b.res.raw - a.res.raw)
+                .map(({ e, res }) => (
+                  <tr key={e.id} className="hover:bg-paper">
+                    <td className="px-4 py-3 font-medium text-ink">{e.name}</td>
+                    <td className="px-4 py-3 text-ink-muted">{e.role}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-ink">
+                      {fmt(res.raw, 1)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <StatusPill status={res.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={`/departments/${dept.id}/employees/${e.id}`}
+                        className="btn-ghost"
+                      >
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {isCompetency ? (
         <CompetencyView dept={dept} />
