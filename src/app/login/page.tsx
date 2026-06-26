@@ -45,7 +45,7 @@ function LoginForm() {
           </div>
         </div>
 
-        <div className="card space-y-4 p-6">
+        <div className="card animate-scale-in space-y-4 p-6">
           <div>
             <label className="mb-1 block text-sm font-medium text-ink">Email</label>
             <input
