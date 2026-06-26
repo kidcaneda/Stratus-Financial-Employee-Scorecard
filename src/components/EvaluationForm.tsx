@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Department, Employee, Metric, Period } from "@/types";
-import { saveEmployee, newEmployeeId } from "@/lib/employee-actions";
+import { Department, Employee, Metric, MonthlyEvaluation, MonthlyMetricEntry } from "@/types";
+import { saveEmployee, newEmployeeId, saveMonthlyEvaluation } from "@/lib/employee-actions";
+import { makeMonthKey, MONTH_NAMES } from "@/lib/rollup";
 import { fmt } from "@/lib/scoring";
 
-// A form for a manager to add a new employee to a department and enter
-// their evaluation scores. Mirrors the department's KPI metric template.
-// (Competency-type departments are handled in a later iteration.)
+// A form for a manager to add/edit an employee AND record one month's
+// evaluation (Phase C). The manager picks the month being evaluated;
+// quarterly/yearly are computed from the accumulated months, never typed.
 export function EvaluationForm({
   dept,
   existing,
@@ -19,40 +20,36 @@ export function EvaluationForm({
   onSaved: () => void;
   onCancel: () => void;
 }) {
+  const now = new Date();
   const [name, setName] = useState(existing?.name ?? "");
   const [email, setEmail] = useState(existing?.email ?? "");
   const [role, setRole] = useState(existing?.role ?? "");
-  const [period, setPeriod] = useState<Period>("monthly");
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1); // 1-indexed
 
-  // Seed metric rows from the employee (if editing) or the dept template.
-  const templateMetrics: Metric[] =
-    existing?.metrics?.length
-      ? existing.metrics
-      : dept.metrics.map((m) => ({
-          ...m,
-          actual: { monthly: 0, quarterly: 0, yearly: 0 },
-          score: { monthly: 0, quarterly: 0, yearly: 0 },
-        }));
+  // Metric rows seeded from the department template.
+  const templateMetrics: Metric[] = dept.metrics.map((m) => ({
+    ...m,
+    actual: { monthly: 0, quarterly: 0, yearly: 0 },
+    score: { monthly: 0, quarterly: 0, yearly: 0 },
+  }));
 
-  const [metrics, setMetrics] = useState<Metric[]>(templateMetrics);
+  const [rows, setRows] = useState(
+    templateMetrics.map((m) => ({
+      metricId: m.id,
+      metricName: m.name,
+      target: m.target,
+      unit: m.unit,
+      weight: m.weight,
+      actual: 0,
+      score: 0,
+    }))
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const setScore = (idx: number, value: number) => {
-    setMetrics((prev) =>
-      prev.map((m, i) =>
-        i === idx
-          ? { ...m, score: { ...(m.score ?? { monthly: 0, quarterly: 0, yearly: 0 }), [period]: value } }
-          : m
-      )
-    );
-  };
-  const setActual = (idx: number, value: number) => {
-    setMetrics((prev) =>
-      prev.map((m, i) =>
-        i === idx ? { ...m, actual: { ...m.actual, [period]: value } } : m
-      )
-    );
+  const setRow = (i: number, field: "actual" | "score", value: number) => {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
   };
 
   const handleSave = async () => {
@@ -62,61 +59,106 @@ export function EvaluationForm({
       return;
     }
     setBusy(true);
+
+    // 1. Ensure the employee record exists (create/update identity).
+    const employeeId = existing?.id ?? newEmployeeId(name);
     const employee: Employee = {
-      id: existing?.id ?? newEmployeeId(name),
+      id: employeeId,
       name: name.trim(),
       email: email.trim(),
       departmentId: dept.id,
       role: role.trim() || "—",
       evaluatorName: dept.evaluatorName ?? dept.managerName ?? "",
       type: "kpi",
-      metrics,
+      metrics: templateMetrics,
     };
-    const result = await saveEmployee(employee);
+    const empResult = await saveEmployee(employee);
+    if (!empResult.ok) {
+      setBusy(false);
+      setError(empResult.error ?? "Failed to save employee.");
+      return;
+    }
+
+    // 2. Record this month's evaluation as a dated time-series entry.
+    const entries: MonthlyMetricEntry[] = rows.map((r) => ({
+      metricId: r.metricId,
+      metricName: r.metricName,
+      target: r.target,
+      unit: r.unit,
+      weight: r.weight,
+      actual: r.actual,
+      score: r.score,
+    }));
+    const evaluation: MonthlyEvaluation = {
+      monthKey: makeMonthKey(year, month),
+      employeeId,
+      departmentId: dept.id,
+      entries,
+      recordedBy: "",
+      recordedByName: "",
+      recordedAt: Date.now(),
+    };
+    const evalResult = await saveMonthlyEvaluation(evaluation);
     setBusy(false);
-    if (!result.ok) {
-      setError(result.error ?? "Save failed.");
+    if (!evalResult.ok) {
+      setError(evalResult.error ?? "Failed to save evaluation.");
       return;
     }
     onSaved();
   };
 
-  const periods: Period[] = ["monthly", "quarterly", "yearly"];
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
   return (
     <div className="card space-y-5 p-6">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold text-ink">
-          {existing ? "Edit evaluation" : "Add employee & evaluation"}
+          {existing ? `Record evaluation · ${existing.name}` : "Add employee & record evaluation"}
         </h3>
         <button onClick={onCancel} className="text-sm text-ink-muted hover:text-ink">
           Cancel
         </button>
       </div>
 
-      {/* Identity fields */}
+      {/* Identity */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="Name" value={name} onChange={setName} placeholder="Full name" />
         <Field label="Email" value={email} onChange={setEmail} placeholder="name@stratus.finance" />
         <Field label="Role" value={role} onChange={setRole} placeholder="Job title" />
       </div>
 
-      {/* Period selector for which period's scores you're entering */}
-      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-        {periods.map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition ${
-              period === p ? "bg-ink text-white" : "text-ink-muted hover:text-ink"
-            }`}
+      {/* Month being evaluated */}
+      <div className="flex items-end gap-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-ink">Month</label>
+          <select
+            value={month}
+            onChange={(e) => setMonth(Number(e.target.value))}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
           >
-            {p}
-          </button>
-        ))}
+            {MONTH_NAMES.map((mn, i) => (
+              <option key={mn} value={i + 1}>{mn}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-ink">Year</label>
+          <select
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        <p className="pb-2 text-xs text-ink-muted">
+          Quarterly & yearly scores are calculated automatically from the months you record.
+        </p>
       </div>
 
-      {/* Metric entry table */}
+      {/* Metric entry */}
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <table className="w-full text-sm">
           <thead>
@@ -128,17 +170,17 @@ export function EvaluationForm({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {metrics.map((m, i) => (
-              <tr key={m.id}>
-                <td className="px-3 py-2 font-medium text-ink">{m.name}</td>
+            {rows.map((r, i) => (
+              <tr key={r.metricId}>
+                <td className="px-3 py-2 font-medium text-ink">{r.metricName}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-ink-muted">
-                  {fmt(m.target, 0)} {m.unit}
+                  {fmt(r.target, 0)} {r.unit}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <input
                     type="number"
-                    value={m.actual[period] || ""}
-                    onChange={(e) => setActual(i, Number(e.target.value))}
+                    value={r.actual || ""}
+                    onChange={(e) => setRow(i, "actual", Number(e.target.value))}
                     className="w-24 rounded border border-slate-200 px-2 py-1 text-right tabular-nums focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
                   />
                 </td>
@@ -147,8 +189,8 @@ export function EvaluationForm({
                     type="number"
                     min={0}
                     max={100}
-                    value={m.score?.[period] || ""}
-                    onChange={(e) => setScore(i, Number(e.target.value))}
+                    value={r.score || ""}
+                    onChange={(e) => setRow(i, "score", Number(e.target.value))}
                     className="w-24 rounded border border-slate-200 px-2 py-1 text-right tabular-nums focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
                   />
                 </td>
@@ -162,11 +204,9 @@ export function EvaluationForm({
 
       <div className="flex items-center gap-3">
         <button onClick={handleSave} disabled={busy} className="btn-primary">
-          {busy ? "Saving…" : existing ? "Save changes" : "Add employee"}
+          {busy ? "Saving…" : `Save ${MONTH_NAMES[month - 1]} ${year} evaluation`}
         </button>
-        <button onClick={onCancel} className="btn-ghost">
-          Cancel
-        </button>
+        <button onClick={onCancel} className="btn-ghost">Cancel</button>
       </div>
     </div>
   );
