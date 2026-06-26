@@ -7,6 +7,7 @@ import { useDepartments } from "@/hooks/useDepartments";
 import { scoreDepartment, scoreMetric, fmt } from "@/lib/scoring";
 import { Period } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
+import { CompetencyView } from "@/components/CompetencyView";
 
 export default function DepartmentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +26,8 @@ export default function DepartmentDetailPage() {
     );
   }
 
-  const overall = scoreDepartment(dept, period);
+  const isCompetency = dept.type === "competency";
+  const overall = isCompetency ? null : scoreDepartment(dept, period);
 
   return (
     <div className="space-y-6">
@@ -37,11 +39,52 @@ export default function DepartmentDetailPage() {
           <h1 className="mt-1 text-2xl font-semibold text-ink">{dept.name}</h1>
           <p className="text-sm text-ink-muted">{dept.managerName}</p>
         </div>
-        <PeriodSelector value={period} onChange={setPeriod} />
+        {/* Period selector only applies to multi-period KPI scorecards. */}
+        {!isCompetency && <PeriodSelector value={period} onChange={setPeriod} />}
       </div>
 
       {isMock && <MockBanner />}
 
+      {isCompetency ? (
+        <CompetencyView dept={dept} />
+      ) : (
+        <KpiView dept={dept} period={period} overall={overall!} />
+      )}
+
+      {/* Comments + signatures (mirrors a physical scorecard) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="card p-5">
+          <h3 className="mb-2 text-sm font-semibold text-ink">Manager comments</h3>
+          <textarea
+            className="h-24 w-full resize-none rounded-lg border border-slate-200 p-3 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            placeholder="Add notes for this review period…"
+          />
+        </div>
+        <div className="card flex flex-col justify-between p-5">
+          <h3 className="mb-2 text-sm font-semibold text-ink">Sign-off</h3>
+          <div className="space-y-4">
+            <SignLine label="Reviewed by" />
+            <SignLine label="Acknowledged by" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The standard 0–100 KPI scorecard view (extracted so the page can switch
+// between this and the competency view based on dept.type).
+function KpiView({
+  dept,
+  period,
+  overall,
+}: {
+  dept: import("@/types").Department;
+  period: Period;
+  overall: import("@/types").ScoreResult;
+}) {
+  return (
+    <>
       {/* Overall summary */}
       <div className="card flex items-center gap-6 p-6">
         <ScoreRing value={overall.raw} status={overall.status} />
@@ -94,25 +137,7 @@ export default function DepartmentDetailPage() {
           </tbody>
         </table>
       </div>
-
-      {/* Comments + signatures (mirrors a physical scorecard) */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="card p-5">
-          <h3 className="mb-2 text-sm font-semibold text-ink">Manager comments</h3>
-          <textarea
-            className="h-24 w-full resize-none rounded-lg border border-slate-200 p-3 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-            placeholder="Add notes for this review period…"
-          />
-        </div>
-        <div className="card flex flex-col justify-between p-5">
-          <h3 className="mb-2 text-sm font-semibold text-ink">Sign-off</h3>
-          <div className="space-y-4">
-            <SignLine label="Reviewed by" />
-            <SignLine label="Acknowledged by" />
-          </div>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }
 
