@@ -43,6 +43,14 @@ service cloud.firestore {
         allow read: if signedIn();
         allow create, update: if isAdmin() || managesDept(deptId);
         allow delete: if isAdmin();
+
+        // months subcollection (Phase C) — dated monthly evaluations.
+        // Same write permission as the employee record.
+        match /months/{monthKey} {
+          allow read: if signedIn();
+          allow create, update: if isAdmin() || managesDept(deptId);
+          allow delete: if isAdmin();
+        }
       }
     }
 
