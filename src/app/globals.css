@@ -12,15 +12,13 @@
 
 @layer base {
   body {
-    @apply bg-paper text-ink antialiased;
+    @apply bg-canvas text-ink antialiased;
     font-family: var(--font-sans);
-    font-feature-settings: "cv01", "cv03";
   }
   h1, h2, h3 {
     font-family: var(--font-display);
     letter-spacing: -0.01em;
   }
-  /* Numeric data reads as instrument readouts. */
   .tabular-nums {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
@@ -30,31 +28,30 @@
 
 @layer components {
   .card {
-    @apply rounded-card bg-surface border border-slate-200/70 shadow-card;
+    @apply rounded-card bg-panel border border-hairline shadow-card;
+  }
+  .card-hover {
+    @apply transition-all duration-200 hover:bg-panel-2 hover:shadow-lift hover:-translate-y-0.5;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-ink px-4 py-2
-           text-sm font-medium text-white transition-all duration-150 hover:bg-ink-soft
-           hover:shadow-lift active:scale-[0.98]
+    @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2
+           text-sm font-medium text-white transition-all duration-150
+           hover:brightness-110 hover:shadow-glow active:scale-[0.98]
            focus:outline-none focus-visible:ring-2 focus-visible:ring-accent
-           focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+           focus-visible:ring-offset-2 focus-visible:ring-offset-canvas
+           disabled:opacity-50 disabled:pointer-events-none;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-lg border border-slate-200
+    @apply inline-flex items-center justify-center rounded-lg border border-hairline
            px-3 py-1.5 text-sm font-medium text-ink-soft transition-all duration-150
-           hover:bg-paper hover:border-slate-300 active:scale-[0.98]
+           hover:bg-panel-2 hover:text-ink active:scale-[0.98]
            focus:outline-none focus-visible:ring-2 focus-visible:ring-accent;
   }
   .pill {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
   }
-  /* Brass hairline divider — the instrument signature, used sparingly. */
-  .rule-brass {
-    @apply h-px w-full bg-gradient-to-r from-transparent via-brass to-transparent opacity-60;
-  }
-  /* Staggered entrance: children fade-up in sequence on load. */
   .stagger > * {
-    animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: fade-up 0.5s cubic-bezier(0.16,1,0.3,1) both;
   }
   .stagger > *:nth-child(1) { animation-delay: 0.02s; }
   .stagger > *:nth-child(2) { animation-delay: 0.06s; }
@@ -62,11 +59,13 @@
   .stagger > *:nth-child(4) { animation-delay: 0.14s; }
   .stagger > *:nth-child(5) { animation-delay: 0.18s; }
   .stagger > *:nth-child(6) { animation-delay: 0.22s; }
+  .stagger > *:nth-child(7) { animation-delay: 0.26s; }
+  .stagger > *:nth-child(8) { animation-delay: 0.30s; }
 }
 
-/* Row hover lift on interactive table rows. */
-.row-interactive {
-  transition: background-color 0.12s ease, transform 0.12s ease;
+/* Inputs on dark */
+input, select, textarea {
+  color-scheme: dark;
 }
 
 @media (prefers-reduced-motion: reduce) {
