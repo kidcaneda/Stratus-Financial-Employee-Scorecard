@@ -50,7 +50,7 @@ export default function DepartmentsPage() {
                 </span>
                 <span className="text-sm text-ink-muted">/ 100</span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-2 overflow-hidden rounded-full bg-panel-2">
                 <div
                   className={`h-full rounded-full ${barColor} transition-all`}
                   style={{ width: `${Math.min(100, res.raw)}%` }}
