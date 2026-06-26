@@ -87,7 +87,7 @@ function ThresholdInput({
         max={100}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm tabular-nums focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        className="w-full rounded-lg border border-hairline bg-panel-2 text-ink px-3 py-2 text-sm tabular-nums focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
       />
     </div>
   );
@@ -95,8 +95,8 @@ function ThresholdInput({
 
 function RoleRow({ role, desc }: { role: string; desc: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-lg bg-paper p-3">
-      <span className="pill bg-white text-ink">{role}</span>
+    <div className="flex items-start gap-3 rounded-lg bg-panel-2 p-3">
+      <span className="pill bg-panel text-ink">{role}</span>
       <span className="text-sm text-ink-muted">{desc}</span>
     </div>
   );
