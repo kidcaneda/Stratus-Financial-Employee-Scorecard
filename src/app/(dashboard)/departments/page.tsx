@@ -25,7 +25,7 @@ export default function DepartmentsPage() {
 
       {isMock && <MockBanner />}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {departments.map((d) => {
           const res = scoreDepartment(d, period);
           const barColor =
@@ -38,7 +38,7 @@ export default function DepartmentsPage() {
             <Link
               key={d.id}
               href={`/departments/${d.id}`}
-              className="card group p-5 transition hover:shadow-md"
+              className="card group p-5 transition-all duration-200 hover:shadow-lift hover:-translate-y-0.5"
             >
               <div className="mb-3 flex items-start justify-between">
                 <h2 className="text-base font-semibold text-ink">{d.name}</h2>
