@@ -13,17 +13,17 @@ export function AnalyticsPanel({ report }: { report: AnalyticsReport }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="border-b border-slate-200 bg-paper px-5 py-3">
+      <div className="border-b border-hairline bg-panel-2 px-5 py-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-ink">Performance analysis</h3>
-          <span className="pill bg-white text-ink-muted">
+          <span className="pill bg-panel text-ink-muted">
             Data-derived · review before sharing
           </span>
         </div>
         <p className="mt-1 text-sm text-ink-muted">{report.summary}</p>
       </div>
 
-      <div className="grid grid-cols-1 divide-y divide-slate-100 md:grid-cols-3 md:divide-x md:divide-y-0">
+      <div className="grid grid-cols-1 divide-y divide-hairline md:grid-cols-3 md:divide-x md:divide-y-0">
         <Column
           title="Strengths"
           accent="text-signal-green"
@@ -44,7 +44,7 @@ export function AnalyticsPanel({ report }: { report: AnalyticsReport }) {
         />
       </div>
 
-      <div className="border-t border-slate-200 bg-paper px-5 py-2.5">
+      <div className="border-t border-hairline bg-panel-2 px-5 py-2.5">
         <p className="text-xs text-ink-muted">
           These observations are generated from recorded scores using fixed
           rules. They are a starting point for discussion, not a final
