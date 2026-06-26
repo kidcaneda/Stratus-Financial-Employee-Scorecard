@@ -5,17 +5,21 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useDepartments } from "@/hooks/useDepartments";
 import { useEmployees } from "@/hooks/useEmployees";
+import { useDepartmentMonths } from "@/hooks/useDepartmentMonths";
 import { useAuth } from "@/hooks/useAuth";
 import { scoreDepartment, scoreMetric, scoreEmployee, fmt } from "@/lib/scoring";
+import { analyze } from "@/lib/analytics";
 import { Period } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
 import { CompetencyView } from "@/components/CompetencyView";
 import { EvaluationForm } from "@/components/EvaluationForm";
+import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 
 export default function DepartmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { departments, isMock, loading } = useDepartments();
   const { employees } = useEmployees(id);
+  const { months: deptMonths } = useDepartmentMonths(id);
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("monthly");
   const [showForm, setShowForm] = useState(false);
@@ -134,6 +138,11 @@ export default function DepartmentDetailPage() {
         <CompetencyView dept={dept} />
       ) : (
         <KpiView dept={dept} period={period} overall={overall!} />
+      )}
+
+      {/* Phase E: department-level analytics from pooled employee months. */}
+      {!isCompetency && deptMonths.length > 0 && (
+        <AnalyticsPanel report={analyze(deptMonths)} />
       )}
 
       {/* Comments + signatures (mirrors a physical scorecard) */}
