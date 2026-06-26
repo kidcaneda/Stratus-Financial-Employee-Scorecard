@@ -126,9 +126,9 @@ function EvaluationCard({ evaln }: { evaln: MonthlyEvaluation }) {
       </div>
 
       {/* Metric breakdown */}
-      <div className="mb-4 overflow-hidden rounded-lg border border-slate-200">
+      <div className="mb-4 overflow-hidden rounded-lg border border-hairline">
         <table className="w-full text-sm">
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-hairline">
             {evaln.entries.map((m) => (
               <tr key={m.metricId}>
                 <td className="px-3 py-2 text-ink">{m.metricName}</td>
@@ -161,7 +161,7 @@ function EvaluationCard({ evaln }: { evaln: MonthlyEvaluation }) {
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder="Optional comment (required if you dispute)…"
-            className="h-20 w-full resize-none rounded-lg border border-slate-200 p-3 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            className="h-20 w-full resize-none rounded-lg border border-hairline p-3 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
           />
           {error && <p className="text-sm text-signal-red">{error}</p>}
           <div className="flex gap-3">
