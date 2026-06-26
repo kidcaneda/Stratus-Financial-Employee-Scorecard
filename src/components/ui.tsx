@@ -83,7 +83,7 @@ export function PeriodSelector({
 }) {
   const periods: Period[] = ["monthly", "quarterly", "yearly"];
   return (
-    <div className="inline-flex rounded-lg border border-slate-200 bg-surface p-0.5">
+    <div className="inline-flex rounded-lg border border-hairline bg-surface p-0.5">
       {periods.map((p) => (
         <button
           key={p}
