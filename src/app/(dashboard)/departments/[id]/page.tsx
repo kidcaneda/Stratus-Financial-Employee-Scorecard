@@ -5,16 +5,20 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useDepartments } from "@/hooks/useDepartments";
 import { useEmployees } from "@/hooks/useEmployees";
+import { useAuth } from "@/hooks/useAuth";
 import { scoreDepartment, scoreMetric, scoreEmployee, fmt } from "@/lib/scoring";
 import { Period } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
 import { CompetencyView } from "@/components/CompetencyView";
+import { EvaluationForm } from "@/components/EvaluationForm";
 
 export default function DepartmentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { departments, isMock, loading } = useDepartments();
   const { employees } = useEmployees(id);
+  const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("monthly");
+  const [showForm, setShowForm] = useState(false);
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
 
@@ -30,6 +34,10 @@ export default function DepartmentDetailPage() {
 
   const isCompetency = dept.type === "competency";
   const overall = isCompetency ? null : scoreDepartment(dept, period);
+
+  // Managers and admins can add/edit employees. (The server re-checks the
+  // specific department permission; this just controls UI visibility.)
+  const canEdit = user?.role === "admin" || user?.role === "manager";
 
   return (
     <div className="space-y-6">
@@ -50,6 +58,27 @@ export default function DepartmentDetailPage() {
       </div>
 
       {isMock && <MockBanner />}
+
+      {/* Add-employee / evaluation form (managers & admins). */}
+      {canEdit && showForm && !isCompetency && (
+        <EvaluationForm
+          dept={dept}
+          onSaved={() => {
+            setShowForm(false);
+            // Re-fetch by reloading the route data.
+            window.location.reload();
+          }}
+          onCancel={() => setShowForm(false)}
+        />
+      )}
+
+      {canEdit && !showForm && !isCompetency && (
+        <div className="flex justify-end">
+          <button onClick={() => setShowForm(true)} className="btn-primary">
+            + Add employee
+          </button>
+        </div>
+      )}
 
       {/* Employee roster (Phase A). Shown when the department has people. */}
       {employees.length > 0 && (
