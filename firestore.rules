@@ -44,8 +44,12 @@ service cloud.firestore {
         allow create, update: if isAdmin() || managesDept(deptId);
         allow delete: if isAdmin();
 
-        // months subcollection (Phase C) — dated monthly evaluations.
-        // Same write permission as the employee record.
+        // months subcollection (Phase C/D) — dated monthly evaluations.
+        // Direct client writes are restricted to managers/admins for SCORE
+        // entry. Employee acknowledge/dispute does NOT write directly from
+        // the client — it goes through /api/acknowledge, which uses the
+        // Admin SDK (bypassing these rules) AFTER verifying the employee
+        // owns the record (linkedUid). This keeps the client rule strict.
         match /months/{monthKey} {
           allow read: if signedIn();
           allow create, update: if isAdmin() || managesDept(deptId);
