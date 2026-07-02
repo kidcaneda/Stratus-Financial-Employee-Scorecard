@@ -27,6 +27,34 @@ export function competencyStatus(overall: number): Status {
   return "red";
 }
 
+// Human-readable band label for a 1–5 competency overall. Mirrors the
+// bands used on the source review workbook so scores read the same in the
+// live score-entry form as they do on the printed scorecard.
+export function competencyBand(overall: number): string {
+  if (overall >= 4.5) return "Outstanding";
+  if (overall >= 4.0) return "Exceeds";
+  if (overall >= 3.0) return "Meets";
+  if (overall >= 2.0) return "Developing";
+  return "Needs improvement";
+}
+
+// Suggested 0–100 score for a KPI metric from a freshly-entered actual,
+// used by the live score-entry form so a leader only has to type the
+// actual and the score is computed for them (they can still override).
+// Same math as metricAttainment's fallback branch, but always derives from
+// the actual (never a pre-baked sheet score) since we're entering new data.
+export function kpiScoreFromActual(
+  actual: number,
+  target: number,
+  higherIsBetter: boolean
+): number {
+  if (!target) return 0;
+  const raw = higherIsBetter
+    ? (actual / target) * 100
+    : (2 - actual / target) * 100;
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
 // Attainment of a single metric vs its target (0–100, capped at 100).
 // If the source sheet supplied a pre-calculated score, use it directly
 // (it correctly handles complex multi-period targets). Otherwise compute

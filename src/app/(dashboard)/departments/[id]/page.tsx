@@ -9,7 +9,7 @@ import { useDepartmentMonths } from "@/hooks/useDepartmentMonths";
 import { useAuth } from "@/hooks/useAuth";
 import { scoreDepartment, scoreMetric, scoreEmployee, fmt } from "@/lib/scoring";
 import { analyze } from "@/lib/analytics";
-import { Period } from "@/types";
+import { Period, Employee } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
 import { CompetencyView } from "@/components/CompetencyView";
 import { EvaluationForm } from "@/components/EvaluationForm";
@@ -22,7 +22,12 @@ export default function DepartmentDetailPage() {
   const { months: deptMonths } = useDepartmentMonths(id);
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("monthly");
-  const [showForm, setShowForm] = useState(false);
+  // Score-entry state: `open` false = closed; when open, `target` is the
+  // employee being scored, or null for a brand-new one.
+  const [form, setForm] = useState<{ open: boolean; target: Employee | null }>({
+    open: false,
+    target: null,
+  });
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
 
@@ -39,9 +44,18 @@ export default function DepartmentDetailPage() {
   const isCompetency = dept.type === "competency";
   const overall = isCompetency ? null : scoreDepartment(dept, period);
 
-  // Managers and admins can add/edit employees. (The server re-checks the
-  // specific department permission; this just controls UI visibility.)
+  // Supervisors (managers) and admins can score employees. (The server
+  // re-checks the specific department permission; this just controls UI.)
   const canEdit = user?.role === "admin" || user?.role === "manager";
+  const scoreVerb = isCompetency ? "Review" : "Score";
+
+  const openNew = () => setForm({ open: true, target: null });
+  const openEdit = (e: Employee) => setForm({ open: true, target: e });
+  const closeForm = () => setForm({ open: false, target: null });
+  const onSaved = () => {
+    closeForm();
+    window.location.reload();
+  };
 
   return (
     <div className="space-y-6">
@@ -63,23 +77,30 @@ export default function DepartmentDetailPage() {
 
       {isMock && <MockBanner />}
 
-      {/* Add-employee / evaluation form (managers & admins). */}
-      {canEdit && showForm && !isCompetency && (
+      {/* Score-entry form (supervisors & admins) — adapts to KPI or competency. */}
+      {canEdit && form.open && (
         <EvaluationForm
+          key={form.target?.id ?? "new"}
           dept={dept}
-          onSaved={() => {
-            setShowForm(false);
-            // Re-fetch by reloading the route data.
-            window.location.reload();
-          }}
-          onCancel={() => setShowForm(false)}
+          existing={form.target ?? undefined}
+          onSaved={onSaved}
+          onCancel={closeForm}
         />
       )}
 
-      {canEdit && !showForm && !isCompetency && (
-        <div className="flex justify-end">
-          <button onClick={() => setShowForm(true)} className="btn-primary">
-            + Add employee
+      {canEdit && !form.open && (
+        <div className="flex items-center justify-between gap-3 rounded-card border border-hairline bg-panel-2/50 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm text-ink-soft">
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-accent/15 text-accent">
+              ✎
+            </span>
+            <span>
+              You have <span className="font-medium text-ink">score-entry access</span> for
+              this department.
+            </span>
+          </div>
+          <button onClick={openNew} className="btn-primary">
+            + {scoreVerb} employee
           </button>
         </div>
       )}
@@ -91,9 +112,7 @@ export default function DepartmentDetailPage() {
             <h3 className="text-sm font-semibold text-ink">
               Employees ({employees.length})
             </h3>
-            <span className="text-xs text-ink-muted">
-              Individual scorecards
-            </span>
+            <span className="text-xs text-ink-muted">Individual scorecards</span>
           </div>
           <table className="w-full text-sm">
             <thead>
@@ -110,7 +129,7 @@ export default function DepartmentDetailPage() {
                 .map((e) => ({ e, res: scoreEmployee(e, period) }))
                 .sort((a, b) => b.res.raw - a.res.raw)
                 .map(({ e, res }) => (
-                  <tr key={e.id} className="hover:bg-panel-2">
+                  <tr key={e.id} className="group transition-colors hover:bg-panel-2">
                     <td className="px-4 py-3 font-medium text-ink">{e.name}</td>
                     <td className="px-4 py-3 text-ink-muted">{e.role}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-ink">
@@ -120,12 +139,22 @@ export default function DepartmentDetailPage() {
                       <StatusPill status={res.status} />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/departments/${dept.id}/employees/${e.id}`}
-                        className="btn-ghost"
-                      >
-                        View
-                      </Link>
+                      <div className="flex justify-end gap-2">
+                        {canEdit && (
+                          <button
+                            onClick={() => openEdit(e)}
+                            className="rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-accent transition-all hover:border-accent/40 hover:bg-accent/10 active:scale-[0.98]"
+                          >
+                            {scoreVerb}
+                          </button>
+                        )}
+                        <Link
+                          href={`/departments/${dept.id}/employees/${e.id}`}
+                          className="btn-ghost"
+                        >
+                          View
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}

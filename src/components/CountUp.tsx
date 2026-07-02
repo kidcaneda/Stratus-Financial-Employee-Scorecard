@@ -36,6 +36,44 @@ export function useCountUp(value: number, durationMs = 900): number {
   return display;
 }
 
+// Eases the displayed number toward a *moving* target. Unlike useCountUp
+// (which animates once from 0 on mount), this re-springs every time `value`
+// changes — used for live figures that update as a leader types scores.
+// Respects reduced motion (snaps instantly).
+export function useEaseTo(value: number, durationMs = 450): number {
+  const [display, setDisplay] = useState(value);
+  const raf = useRef<number>();
+  const fromRef = useRef(value);
+
+  useEffect(() => {
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      setDisplay(value);
+      return;
+    }
+
+    const from = fromRef.current;
+    const start = performance.now();
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const current = from + (value - from) * ease(t);
+      setDisplay(current);
+      fromRef.current = current;
+      if (t < 1) raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+    return () => {
+      if (raf.current) cancelAnimationFrame(raf.current);
+    };
+  }, [value, durationMs]);
+
+  return display;
+}
+
 // Renders a count-up number with fixed decimals.
 export function CountUp({
   value,

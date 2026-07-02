@@ -54,11 +54,36 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.6" },
         },
+        // Score-entry motion: a soft pop when a rating pip is selected,
+        // a downward reveal for the entry panel, and a sweeping sheen
+        // used to confirm a successful save.
+        pop: {
+          "0%": { transform: "scale(0.8)" },
+          "55%": { transform: "scale(1.18)" },
+          "100%": { transform: "scale(1)" },
+        },
+        "reveal-down": {
+          "0%": { opacity: "0", transform: "translateY(-8px) scale(0.99)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        sheen: {
+          "0%": { transform: "translateX(-120%)" },
+          "100%": { transform: "translateX(220%)" },
+        },
+        "check-in": {
+          "0%": { opacity: "0", transform: "scale(0.4) rotate(-12deg)" },
+          "60%": { transform: "scale(1.15) rotate(3deg)" },
+          "100%": { opacity: "1", transform: "scale(1) rotate(0)" },
+        },
       },
       animation: {
         "fade-up": "fade-up 0.5s cubic-bezier(0.16,1,0.3,1) both",
         "scale-in": "scale-in 0.4s cubic-bezier(0.16,1,0.3,1) both",
         "pulse-glow": "pulse-glow 2s ease-in-out infinite",
+        pop: "pop 0.28s cubic-bezier(0.16,1,0.3,1)",
+        "reveal-down": "reveal-down 0.45s cubic-bezier(0.16,1,0.3,1) both",
+        sheen: "sheen 1.1s cubic-bezier(0.16,1,0.3,1)",
+        "check-in": "check-in 0.5s cubic-bezier(0.16,1,0.3,1) both",
       },
     },
   },
