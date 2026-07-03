@@ -63,6 +63,10 @@ export interface Employee {
   departmentId: string;
   role: string; // job title / role within the department
   evaluatorName: string; // the manager who evaluates this person
+  // Auth uid of the supervisor/manager this person reports to. Drives the
+  // "My Team" view (collection-group query) and per-report write access.
+  // Stamped server-side when a lead creates the employee.
+  evaluatorUid?: string;
   type: ScorecardType; // "kpi" or "competency", mirrors the department
   metrics: Metric[]; // populated when type === "kpi"
   competency?: CompetencyCard; // populated when type === "competency"

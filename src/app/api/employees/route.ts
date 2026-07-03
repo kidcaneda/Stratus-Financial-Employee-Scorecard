@@ -49,10 +49,18 @@ async function authenticate(req: NextRequest): Promise<AuthResult> {
   }
 }
 
-// Can this actor write to this department?
-async function canWriteDept(actor: AuthedActor, departmentId: string): Promise<boolean> {
+// Can this actor write this employee record? Admins can write anyone.
+// Department leads qualify two ways: the department is in their
+// assignments doc (coarse grant), or the existing record names them as
+// the evaluator (direct-report grant — scales without admin involvement).
+async function canWriteEmployee(
+  actor: AuthedActor,
+  departmentId: string,
+  existing: FirebaseFirestore.DocumentSnapshot
+): Promise<boolean> {
   if (actor.role === "admin") return true;
   if (!isDeptLead(actor.role)) return false;
+  if (existing.exists && existing.data()?.evaluatorUid === actor.uid) return true;
   const snap = await adminDb().collection("assignments").doc(actor.uid).get();
   if (!snap.exists) return false;
   const depts: string[] = snap.data()?.departmentIds ?? [];
@@ -86,17 +94,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Authorization: actor must be allowed to write this department.
-  const allowed = await canWriteDept(actor, employee.departmentId);
-  if (!allowed) {
-    return NextResponse.json(
-      {
-        error: `You don't have permission to write to "${employee.departmentId}". Managers can only edit their assigned departments.`,
-      },
-      { status: 403 }
-    );
-  }
-
   // Basic server-side validation of the data shape.
   if (employee.type === "kpi" && !Array.isArray(employee.metrics)) {
     return NextResponse.json(
@@ -114,10 +111,33 @@ export async function POST(req: NextRequest) {
   const existing = await empRef.get();
   const isNew = !existing.exists;
 
+  // Authorization: assigned department, direct report, or admin.
+  const allowed = await canWriteEmployee(actor, employee.departmentId, existing);
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        error: `You don't have permission to write to "${employee.departmentId}". Leads can only edit their own reports or assigned departments.`,
+      },
+      { status: 403 }
+    );
+  }
+
+  // A lead who creates an employee becomes their evaluator (unless the
+  // record already names one). This is what links reports to supervisors
+  // so the team grows without an admin having to wire anything up.
+  const evaluatorStamp =
+    isNew && isDeptLead(actor.role)
+      ? {
+          evaluatorUid: employee.evaluatorUid ?? actor.uid,
+          evaluatorName: employee.evaluatorName || actor.name,
+        }
+      : {};
+
   try {
     await empRef.set(
       {
         ...employee,
+        ...evaluatorStamp,
         updatedAt: Date.now(),
         updatedBy: actor.uid,
       },

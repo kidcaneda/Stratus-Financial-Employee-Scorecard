@@ -5,14 +5,21 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function role() { return request.auth.token.role; }
     function isAdmin() { return signedIn() && role() == 'admin'; }
-    function isManager() { return signedIn() && role() == 'manager'; }
+    // Managers and supervisors are the same privilege tier: department
+    // leads who score the employees reporting to them.
+    function isLead() { return signedIn() && (role() == 'manager' || role() == 'supervisor'); }
 
-    // The departments a manager is assigned to (from assignments/{uid}).
+    // The departments a lead is assigned to (from assignments/{uid}).
     function assignedDepts() {
       return get(/databases/$(database)/documents/assignments/$(request.auth.uid)).data.departmentIds;
     }
     function managesDept(deptId) {
-      return isManager() && deptId in assignedDepts();
+      return isLead() && deptId in assignedDepts();
+    }
+    // Direct-report link: the employee record names this lead as evaluator.
+    function evaluates(deptId, employeeId) {
+      return isLead() &&
+        get(/databases/$(database)/documents/departments/$(deptId)/employees/$(employeeId)).data.evaluatorUid == request.auth.uid;
     }
 
     // users/{uid} — own profile read; admin full.
@@ -37,11 +44,13 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
-      // employees subcollection — managers may write to THEIR departments,
-      // admins to any. This is the core Phase B write permission.
+      // employees subcollection — leads may write to THEIR departments or
+      // THEIR direct reports, admins to any. Core Phase B write permission.
       match /employees/{employeeId} {
         allow read: if signedIn();
-        allow create, update: if isAdmin() || managesDept(deptId);
+        allow create: if isAdmin() || managesDept(deptId);
+        allow update: if isAdmin() || managesDept(deptId)
+          || (isLead() && resource.data.evaluatorUid == request.auth.uid);
         allow delete: if isAdmin();
 
         // months subcollection (Phase C/D) — dated monthly evaluations.
@@ -52,10 +61,18 @@ service cloud.firestore {
         // owns the record (linkedUid). This keeps the client rule strict.
         match /months/{monthKey} {
           allow read: if signedIn();
-          allow create, update: if isAdmin() || managesDept(deptId);
+          allow create, update: if isAdmin() || managesDept(deptId)
+            || evaluates(deptId, employeeId);
           allow delete: if isAdmin();
         }
       }
+    }
+
+    // Collection-group reads power the "My Team" direct-report query
+    // (collectionGroup('employees').where('evaluatorUid', '==', uid)).
+    // Same visibility as the nested rule above: any signed-in user.
+    match /{path=**}/employees/{employeeId} {
+      allow read: if signedIn();
     }
 
     // audit/{id} — append-only trail. Anyone signed in may create (the

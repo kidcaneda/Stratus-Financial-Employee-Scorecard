@@ -42,9 +42,23 @@ async function authenticate(
   }
 }
 
-async function canWriteDept(actor: Actor, departmentId: string): Promise<boolean> {
+// Admins can record for anyone. Leads qualify two ways: the employee's
+// record names them as evaluator (direct report), or the department is in
+// their assignments doc (coarse, admin-managed grant).
+async function canWriteEvaluation(
+  actor: Actor,
+  departmentId: string,
+  employeeId: string
+): Promise<boolean> {
   if (actor.role === "admin") return true;
   if (!isDeptLead(actor.role)) return false;
+  const empSnap = await adminDb()
+    .collection("departments")
+    .doc(departmentId)
+    .collection("employees")
+    .doc(employeeId)
+    .get();
+  if (empSnap.exists && empSnap.data()?.evaluatorUid === actor.uid) return true;
   const snap = await adminDb().collection("assignments").doc(actor.uid).get();
   if (!snap.exists) return false;
   return (snap.data()?.departmentIds ?? []).includes(departmentId);
@@ -89,10 +103,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const allowed = await canWriteDept(actor, evaluation.departmentId);
+  const allowed = await canWriteEvaluation(
+    actor,
+    evaluation.departmentId,
+    evaluation.employeeId
+  );
   if (!allowed) {
     return NextResponse.json(
-      { error: "You can only record evaluations for your assigned departments." },
+      { error: "You can only record evaluations for your own reports or assigned departments." },
       { status: 403 }
     );
   }

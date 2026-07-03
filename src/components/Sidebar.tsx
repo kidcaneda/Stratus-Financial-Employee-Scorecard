@@ -14,6 +14,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { label: "Overview", href: "/dashboard", roles: ["admin", "manager", "supervisor", "employee"] },
   { label: "Departments", href: "/departments", roles: ["admin", "manager", "supervisor"] },
+  { label: "My Team", href: "/my-team", roles: ["admin", "manager", "supervisor"] },
   { label: "My Scorecard", href: "/scorecard", roles: ["admin", "manager", "supervisor", "employee"] },
   { label: "My Evaluations", href: "/my-evaluations", roles: ["admin", "manager", "supervisor", "employee"] },
   { label: "Team View", href: "/team", roles: ["admin", "manager", "supervisor"] },
