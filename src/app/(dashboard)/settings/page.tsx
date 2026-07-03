@@ -60,7 +60,7 @@ export default function SettingsPage() {
       <div className="card space-y-3 p-6">
         <h2 className="text-base font-semibold text-ink">Access roles</h2>
         <RoleRow role="Admin" desc="Full access — run sync, edit thresholds, manage users." />
-        <RoleRow role="Manager" desc="View own department and team scorecards." />
+        <RoleRow role="Manager / Supervisor" desc="View own department and team scorecards; score assigned employees." />
         <RoleRow role="Employee" desc="View own scorecard only." />
       </div>
     </div>

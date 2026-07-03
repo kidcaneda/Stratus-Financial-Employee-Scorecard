@@ -9,7 +9,7 @@ import { useDepartmentMonths } from "@/hooks/useDepartmentMonths";
 import { useAuth } from "@/hooks/useAuth";
 import { scoreDepartment, scoreMetric, scoreEmployee, fmt } from "@/lib/scoring";
 import { analyze } from "@/lib/analytics";
-import { Period, Employee } from "@/types";
+import { Period, Employee, isDeptLead } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
 import { CompetencyView } from "@/components/CompetencyView";
 import { EvaluationForm } from "@/components/EvaluationForm";
@@ -46,7 +46,7 @@ export default function DepartmentDetailPage() {
 
   // Supervisors (managers) and admins can score employees. (The server
   // re-checks the specific department permission; this just controls UI.)
-  const canEdit = user?.role === "admin" || user?.role === "manager";
+  const canEdit = user?.role === "admin" || isDeptLead(user?.role);
   const scoreVerb = isCompetency ? "Review" : "Score";
 
   const openNew = () => setForm({ open: true, target: null });

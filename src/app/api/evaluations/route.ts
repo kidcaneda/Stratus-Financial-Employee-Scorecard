@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { MonthlyEvaluation, AuditEntry } from "@/types";
+import { MonthlyEvaluation, AuditEntry, isDeptLead } from "@/types";
 import { sendEmail, evaluationEmail } from "@/lib/mailer";
 
 export const runtime = "nodejs";
@@ -44,7 +44,7 @@ async function authenticate(
 
 async function canWriteDept(actor: Actor, departmentId: string): Promise<boolean> {
   if (actor.role === "admin") return true;
-  if (actor.role !== "manager") return false;
+  if (!isDeptLead(actor.role)) return false;
   const snap = await adminDb().collection("assignments").doc(actor.uid).get();
   if (!snap.exists) return false;
   return (snap.data()?.departmentIds ?? []).includes(departmentId);

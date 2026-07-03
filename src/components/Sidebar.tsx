@@ -12,11 +12,11 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { label: "Overview", href: "/dashboard", roles: ["admin", "manager", "employee"] },
-  { label: "Departments", href: "/departments", roles: ["admin", "manager"] },
-  { label: "My Scorecard", href: "/scorecard", roles: ["admin", "manager", "employee"] },
-  { label: "My Evaluations", href: "/my-evaluations", roles: ["admin", "manager", "employee"] },
-  { label: "Team View", href: "/team", roles: ["admin", "manager"] },
+  { label: "Overview", href: "/dashboard", roles: ["admin", "manager", "supervisor", "employee"] },
+  { label: "Departments", href: "/departments", roles: ["admin", "manager", "supervisor"] },
+  { label: "My Scorecard", href: "/scorecard", roles: ["admin", "manager", "supervisor", "employee"] },
+  { label: "My Evaluations", href: "/my-evaluations", roles: ["admin", "manager", "supervisor", "employee"] },
+  { label: "Team View", href: "/team", roles: ["admin", "manager", "supervisor"] },
   { label: "Excel Sync", href: "/admin/sync", roles: ["admin"] },
   { label: "Settings", href: "/settings", roles: ["admin"] },
 ];

@@ -3,7 +3,14 @@
 // These mirror the Firestore collection structure.
 // ============================================================
 
-export type Role = "admin" | "manager" | "employee";
+export type Role = "admin" | "manager" | "supervisor" | "employee";
+
+// "supervisor" and "manager" are the same privilege tier — some user
+// profiles use one word, some the other. Typed as string so the server
+// routes can pass raw token claims through it.
+export function isDeptLead(role: string | null | undefined): boolean {
+  return role === "manager" || role === "supervisor";
+}
 
 export type Period = "monthly" | "quarterly" | "yearly";
 

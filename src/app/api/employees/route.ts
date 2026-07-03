@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { Employee, AuditEntry } from "@/types";
+import { Employee, AuditEntry, isDeptLead } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -52,7 +52,7 @@ async function authenticate(req: NextRequest): Promise<AuthResult> {
 // Can this actor write to this department?
 async function canWriteDept(actor: AuthedActor, departmentId: string): Promise<boolean> {
   if (actor.role === "admin") return true;
-  if (actor.role !== "manager") return false;
+  if (!isDeptLead(actor.role)) return false;
   const snap = await adminDb().collection("assignments").doc(actor.uid).get();
   if (!snap.exists) return false;
   const depts: string[] = snap.data()?.departmentIds ?? [];
