@@ -2,7 +2,7 @@
  * Provision a user's role (custom claim) + Firestore profile.
  *
  * Usage:
- *   npx tsx scripts/set-role.ts <email> <admin|manager|employee> [departmentId]
+ *   npx tsx scripts/set-role.ts <email> <admin|manager|supervisor|employee> [departmentId]
  *
  * Requires the FIREBASE_ADMIN_* env vars to be set (see .env.local.example).
  * The user must already exist in Firebase Auth (create them in the console
@@ -16,8 +16,8 @@ async function main() {
     console.error("Usage: tsx scripts/set-role.ts <email> <role> [departmentId]");
     process.exit(1);
   }
-  if (!["admin", "manager", "employee"].includes(role)) {
-    console.error("Role must be admin, manager, or employee.");
+  if (!["admin", "manager", "supervisor", "employee"].includes(role)) {
+    console.error("Role must be admin, manager, supervisor, or employee.");
     process.exit(1);
   }
 
