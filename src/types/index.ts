@@ -73,6 +73,10 @@ export interface Employee {
   // Phase D/E: links this employee record to a Firebase Auth account so
   // the person can log in and see/acknowledge only their own evaluations.
   linkedUid?: string;
+  // Stamped by /api/employees on every save — powers the admin audit
+  // view's "last scored / never scored" recency buckets.
+  updatedAt?: number;
+  updatedBy?: string;
 }
 
 // One measurable line item on a scorecard.
