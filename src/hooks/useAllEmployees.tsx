@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { collection, collectionGroup, getDocs } from "firebase/firestore";
 import { db, firebaseReady } from "@/lib/firebase";
 import { Department, Employee } from "@/types";
@@ -16,6 +16,10 @@ export function useAllEmployees() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isMock, setIsMock] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // Call after a save to re-pull the data without a full page reload.
+  const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +54,7 @@ export function useAllEmployees() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
-  return { employees, departments, isMock, loading };
+  return { employees, departments, isMock, loading, refresh };
 }

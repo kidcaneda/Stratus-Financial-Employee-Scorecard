@@ -7,6 +7,7 @@ import { useAllEmployees } from "@/hooks/useAllEmployees";
 import { scoreEmployee, fmt } from "@/lib/scoring";
 import { Employee, Period } from "@/types";
 import { PeriodSelector, StatusPill, MockBanner } from "@/components/ui";
+import { EvaluationForm } from "@/components/EvaluationForm";
 
 // ============================================================
 // Audit (admin only) — utilization & performance across ALL employees.
@@ -33,10 +34,11 @@ const RECENCY_LABEL: Record<Recency, string> = {
 
 export default function AuditPage() {
   const { user } = useAuth();
-  const { employees, departments, isMock, loading } = useAllEmployees();
+  const { employees, departments, isMock, loading, refresh } = useAllEmployees();
   const [period, setPeriod] = useState<Period>("monthly");
   const [filter, setFilter] = useState<Recency | "all">("all");
   const [query, setQuery] = useState("");
+  const [scoring, setScoring] = useState<Employee | null>(null);
 
   if (user && user.role !== "admin") {
     return (
@@ -164,6 +166,26 @@ export default function AuditPage() {
         />
       </div>
 
+      {/* Inline score entry: admins can evaluate anyone right from the
+          audit table. The form needs the department's template. */}
+      {scoring &&
+        (() => {
+          const dept = departments.find((d) => d.id === scoring.departmentId);
+          if (!dept) return null;
+          return (
+            <EvaluationForm
+              key={scoring.id}
+              dept={dept}
+              existing={scoring}
+              onSaved={() => {
+                setScoring(null);
+                refresh();
+              }}
+              onCancel={() => setScoring(null)}
+            />
+          );
+        })()}
+
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -203,12 +225,25 @@ export default function AuditPage() {
                   <CoverageBadge recency={r.recency} updatedAt={r.e.updatedAt} />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/departments/${r.e.departmentId}/employees/${r.e.id}`}
-                    className="btn-ghost"
-                  >
-                    View
-                  </Link>
+                  <div className="flex justify-end gap-2">
+                    {departments.some((d) => d.id === r.e.departmentId) && (
+                      <button
+                        onClick={() => {
+                          setScoring(r.e);
+                          window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                        className="rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-accent transition-all hover:border-accent/40 hover:bg-accent/10 active:scale-[0.98]"
+                      >
+                        {r.e.type === "competency" ? "Review" : "Score"}
+                      </button>
+                    )}
+                    <Link
+                      href={`/departments/${r.e.departmentId}/employees/${r.e.id}`}
+                      className="btn-ghost"
+                    >
+                      View
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}
