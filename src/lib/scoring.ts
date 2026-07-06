@@ -38,6 +38,14 @@ export function competencyBand(overall: number): string {
   return "Needs improvement";
 }
 
+// A metric whose unit reads as a 1–5 rating scale (e.g. "1-5") — like
+// "Responsiveness (SUPERVISOR RATING)". The workbook lists the scale
+// where a numeric target would be, so the parsed target is unusable;
+// these score as actual out of 5 instead of actual vs target.
+export function isRatingScale(unit: string | undefined): boolean {
+  return /^\s*[01]\s*[-–—]\s*5\s*$/.test(unit ?? "");
+}
+
 // Suggested 0–100 score for a KPI metric from a freshly-entered actual,
 // used by the live score-entry form so a leader only has to type the
 // actual and the score is computed for them (they can still override).
@@ -46,8 +54,12 @@ export function competencyBand(overall: number): string {
 export function kpiScoreFromActual(
   actual: number,
   target: number,
-  higherIsBetter: boolean
+  higherIsBetter: boolean,
+  unit?: string
 ): number {
+  if (isRatingScale(unit)) {
+    return Math.max(0, Math.min(100, Math.round((actual / 5) * 100)));
+  }
   if (!target) return 0;
   const raw = higherIsBetter
     ? (actual / target) * 100
@@ -66,6 +78,11 @@ export function metricAttainment(metric: Metric, period: Period): number {
     if (s > 0) return Math.max(0, Math.min(100, s));
   }
   const actual = metric.actual[period];
+  // 1–5 rating-scale metrics score as actual/5 (their target is a scale
+  // label, not a number).
+  if (isRatingScale(metric.unit)) {
+    return Math.max(0, Math.min(100, (actual / 5) * 100));
+  }
   if (metric.target === 0) return 0;
   let raw: number;
   if (metric.higherIsBetter) {

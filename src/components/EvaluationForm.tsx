@@ -190,7 +190,7 @@ function KpiEntry({
   );
 
   const effective = (r: KpiRow) =>
-    auto ? kpiScoreFromActual(r.actual, r.target, r.higherIsBetter) : r.score;
+    auto ? kpiScoreFromActual(r.actual, r.target, r.higherIsBetter, r.unit) : r.score;
 
   const totalWeight = useMemo(
     () => rows.reduce((s, r) => s + r.weight, 0) || 1,

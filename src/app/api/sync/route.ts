@@ -69,9 +69,12 @@ function slugify(name: string): string {
 
 // Pull the first number out of a target string like "≥ 95%" or
 // "Monthly: ≥ 1,000,000\nQuarterly: ≥ 3,000,000" → 95 / 1000000.
+// A rating-scale target ("1-5") means "out of 5", not "target = 1".
 function parseTarget(raw: any): number {
   if (raw === null || raw === undefined) return 0;
-  const m = String(raw).match(/-?\d[\d,]*\.?\d*/);
+  const s = String(raw);
+  if (/^\s*[01]\s*[-–—]\s*5\s*$/.test(s)) return 5;
+  const m = s.match(/-?\d[\d,]*\.?\d*/);
   return m ? Number(m[0].replace(/,/g, "")) : 0;
 }
 
