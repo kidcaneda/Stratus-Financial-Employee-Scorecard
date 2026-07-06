@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
+import { db, firebaseReady } from "@/lib/firebase";
 import {
   Department,
   Employee,
@@ -211,34 +213,55 @@ function KpiEntry({
     setBusy(true);
 
     const employeeId = existing?.id ?? newEmployeeId(name);
-    // Snapshot the entered values onto the employee's metric template so the
-    // roster & period views reflect the score immediately after saving.
-    const metrics: Metric[] = dept.metrics.map((m) => {
-      const r = rows.find((x) => x.metricId === m.id)!;
-      const sc = effective(r);
-      return {
-        ...m,
-        actual: { monthly: r.actual, quarterly: r.actual, yearly: r.actual },
-        score: { monthly: sc, quarterly: sc, yearly: sc },
-      };
-    });
+    const monthKey = makeMonthKey(year, month);
 
-    const employee: Employee = {
-      id: employeeId,
-      name: name.trim(),
-      email: email.trim(),
-      departmentId: dept.id,
-      role: role.trim() || "—",
-      evaluatorName: dept.evaluatorName ?? dept.managerName ?? "",
-      evaluatorUid: existing?.evaluatorUid,
-      type: "kpi",
-      metrics,
-      linkedUid: existing?.linkedUid,
-    };
-    const empResult = await saveEmployee(employee);
-    if (!empResult.ok) {
-      setBusy(false);
-      return setError(empResult.error ?? "Failed to save employee.");
+    // The employee record carries a "current" snapshot shown on rosters.
+    // Only refresh it when this save is the newest month on record —
+    // back-filling June after August is already saved must not regress
+    // the displayed scores to June's numbers.
+    let refreshSnapshot = true;
+    if (existing && firebaseReady) {
+      try {
+        const monthsSnap = await getDocs(
+          collection(db, "departments", dept.id, "employees", existing.id, "months")
+        );
+        // monthKeys ("2026-06") sort lexicographically by date.
+        refreshSnapshot = !monthsSnap.docs.some((d) => d.id > monthKey);
+      } catch {
+        // If the check fails, keep the previous always-refresh behavior.
+      }
+    }
+
+    if (refreshSnapshot) {
+      // Snapshot the entered values onto the employee's metric template so
+      // the roster & period views reflect the score immediately after saving.
+      const metrics: Metric[] = dept.metrics.map((m) => {
+        const r = rows.find((x) => x.metricId === m.id)!;
+        const sc = effective(r);
+        return {
+          ...m,
+          actual: { monthly: r.actual, quarterly: r.actual, yearly: r.actual },
+          score: { monthly: sc, quarterly: sc, yearly: sc },
+        };
+      });
+
+      const employee: Employee = {
+        id: employeeId,
+        name: name.trim(),
+        email: email.trim(),
+        departmentId: dept.id,
+        role: role.trim() || "—",
+        evaluatorName: dept.evaluatorName ?? dept.managerName ?? "",
+        evaluatorUid: existing?.evaluatorUid,
+        type: "kpi",
+        metrics,
+        linkedUid: existing?.linkedUid,
+      };
+      const empResult = await saveEmployee(employee);
+      if (!empResult.ok) {
+        setBusy(false);
+        return setError(empResult.error ?? "Failed to save employee.");
+      }
     }
 
     const entries: MonthlyMetricEntry[] = rows.map((r) => ({
@@ -251,7 +274,7 @@ function KpiEntry({
       score: effective(r),
     }));
     const evaluation: MonthlyEvaluation = {
-      monthKey: makeMonthKey(year, month),
+      monthKey,
       employeeId,
       departmentId: dept.id,
       entries,
