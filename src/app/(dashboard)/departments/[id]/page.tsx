@@ -13,6 +13,7 @@ import { Period, Employee, isDeptLead } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
 import { CompetencyView } from "@/components/CompetencyView";
 import { EvaluationForm } from "@/components/EvaluationForm";
+import { MetricsEditor } from "@/components/MetricsEditor";
 import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 
 export default function DepartmentDetailPage() {
@@ -28,6 +29,7 @@ export default function DepartmentDetailPage() {
     open: false,
     target: null,
   });
+  const [editingMetrics, setEditingMetrics] = useState(false);
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
 
@@ -46,7 +48,8 @@ export default function DepartmentDetailPage() {
 
   // Supervisors (managers) and admins can score employees. (The server
   // re-checks the specific department permission; this just controls UI.)
-  const canEdit = user?.role === "admin" || isDeptLead(user?.role);
+  const isAdmin = user?.role === "admin";
+  const canEdit = isAdmin || isDeptLead(user?.role);
   const scoreVerb = isCompetency ? "Review" : "Score";
 
   const openNew = () => setForm({ open: true, target: null });
@@ -99,10 +102,26 @@ export default function DepartmentDetailPage() {
               this department.
             </span>
           </div>
-          <button onClick={openNew} className="btn-primary">
-            + {scoreVerb} employee
-          </button>
+          <div className="flex items-center gap-2">
+            {isAdmin && !isCompetency && !editingMetrics && (
+              <button onClick={() => setEditingMetrics(true)} className="btn-ghost">
+                Edit metrics
+              </button>
+            )}
+            <button onClick={openNew} className="btn-primary">
+              + {scoreVerb} employee
+            </button>
+          </div>
         </div>
+      )}
+
+      {/* Admin metric-template editor (KPI departments). */}
+      {isAdmin && !isCompetency && editingMetrics && (
+        <MetricsEditor
+          dept={dept}
+          onSaved={() => window.location.reload()}
+          onCancel={() => setEditingMetrics(false)}
+        />
       )}
 
       {/* Employee roster (Phase A). Shown when the department has people. */}
