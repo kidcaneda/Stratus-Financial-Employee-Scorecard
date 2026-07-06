@@ -65,6 +65,35 @@ export function useMyTeam() {
         return;
       }
 
+      // Admins evaluate everyone: their "team" is the whole company.
+      // Two reads total — all employees (collection group) + departments.
+      if (user.role === "admin") {
+        const [emps, depts] = await Promise.all([
+          getDocs(collectionGroup(db, "employees")).then(
+            (snap) => snap.docs.map((d) => d.data() as Employee),
+            () => [] as Employee[]
+          ),
+          getDocs(collection(db, "departments")).then(
+            (snap) => snap.docs.map((d) => d.data() as Department),
+            () => [] as Department[]
+          ),
+        ]);
+        if (cancelled) return;
+        const next: TeamGroup[] = depts
+          .map((dept) => ({
+            dept,
+            employees: emps
+              .filter((e) => e.departmentId === dept.id)
+              .sort((a, b) => a.name.localeCompare(b.name)),
+          }))
+          .filter((g) => g.employees.length > 0)
+          .sort((a, b) => a.dept.name.localeCompare(b.dept.name));
+        setGroups(next);
+        setIsMock(false);
+        setLoading(false);
+        return;
+      }
+
       // 1. Direct reports (person-level link, spans departments). If the
       //    collection-group index isn't deployed yet this read rejects —
       //    treat that as "no direct links" rather than failing the page.

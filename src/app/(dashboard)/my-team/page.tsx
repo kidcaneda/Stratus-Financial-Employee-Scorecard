@@ -29,7 +29,8 @@ export default function MyTeamPage() {
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
 
-  const canScore = user?.role === "admin" || isDeptLead(user?.role);
+  const isAdmin = user?.role === "admin";
+  const canScore = isAdmin || isDeptLead(user?.role);
   const total = groups.reduce((s, g) => s + g.employees.length, 0);
 
   return (
@@ -38,7 +39,9 @@ export default function MyTeamPage() {
         <div>
           <h1 className="text-2xl font-semibold text-ink">My Team</h1>
           <p className="text-sm text-ink-muted">
-            {total > 0
+            {isAdmin
+              ? `Admin — you can evaluate ${total > 0 ? `all ${total} employees across ${groups.length} departments` : "every employee"}`
+              : total > 0
               ? `${total} ${total === 1 ? "person reports" : "people report"} to you across ${groups.length} ${groups.length === 1 ? "department" : "departments"}`
               : "Employees who report to you"}
           </p>
@@ -50,15 +53,29 @@ export default function MyTeamPage() {
 
       {groups.length === 0 && (
         <div className="card p-8 text-center">
-          <h2 className="text-base font-semibold text-ink">No reports yet</h2>
+          <h2 className="text-base font-semibold text-ink">
+            {isAdmin ? "No employees yet" : "No reports yet"}
+          </h2>
           <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
-            Employees appear here when you record their scorecard (you become
-            their evaluator automatically) or when an admin assigns you their
-            department. Browse{" "}
-            <Link href="/departments" className="text-accent hover:underline">
-              Departments
-            </Link>{" "}
-            to get started.
+            {isAdmin ? (
+              <>
+                No employee records exist yet. Add them from a{" "}
+                <Link href="/departments" className="text-accent hover:underline">
+                  department page
+                </Link>{" "}
+                or run the directory import script.
+              </>
+            ) : (
+              <>
+                Employees appear here when you record their scorecard (you
+                become their evaluator automatically) or when an admin assigns
+                you their department. Browse{" "}
+                <Link href="/departments" className="text-accent hover:underline">
+                  Departments
+                </Link>{" "}
+                to get started.
+              </>
+            )}
           </p>
         </div>
       )}
