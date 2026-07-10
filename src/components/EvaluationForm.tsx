@@ -521,7 +521,8 @@ function CompetencyEntry({
     return (
       <div className="card p-6 text-sm text-ink-muted">
         This competency department has no criteria template to rate against yet.
-        Run the Excel sync to load it first.
+        An admin can define one with the <span className="font-medium text-ink">Edit criteria</span>{" "}
+        button on the department page (or load it via Excel Sync).
       </div>
     );
   }

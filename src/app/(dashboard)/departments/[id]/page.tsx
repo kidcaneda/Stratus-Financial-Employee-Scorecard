@@ -14,6 +14,7 @@ import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/
 import { CompetencyView } from "@/components/CompetencyView";
 import { EvaluationForm } from "@/components/EvaluationForm";
 import { MetricsEditor } from "@/components/MetricsEditor";
+import { CriteriaEditor } from "@/components/CriteriaEditor";
 import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 
 export default function DepartmentDetailPage() {
@@ -103,9 +104,9 @@ export default function DepartmentDetailPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {isAdmin && !isCompetency && !editingMetrics && (
+            {isAdmin && !editingMetrics && (
               <button onClick={() => setEditingMetrics(true)} className="btn-ghost">
-                Edit metrics
+                {isCompetency ? "Edit criteria" : "Edit metrics"}
               </button>
             )}
             <button onClick={openNew} className="btn-primary">
@@ -115,14 +116,22 @@ export default function DepartmentDetailPage() {
         </div>
       )}
 
-      {/* Admin metric-template editor (KPI departments). */}
-      {isAdmin && !isCompetency && editingMetrics && (
-        <MetricsEditor
-          dept={dept}
-          onSaved={() => window.location.reload()}
-          onCancel={() => setEditingMetrics(false)}
-        />
-      )}
+      {/* Admin template editors: metrics (KPI) / criteria (competency). */}
+      {isAdmin &&
+        editingMetrics &&
+        (isCompetency ? (
+          <CriteriaEditor
+            dept={dept}
+            onSaved={() => window.location.reload()}
+            onCancel={() => setEditingMetrics(false)}
+          />
+        ) : (
+          <MetricsEditor
+            dept={dept}
+            onSaved={() => window.location.reload()}
+            onCancel={() => setEditingMetrics(false)}
+          />
+        ))}
 
       {/* Employee roster (Phase A). Shown when the department has people. */}
       {employees.length > 0 && (

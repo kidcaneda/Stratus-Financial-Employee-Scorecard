@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { Metric } from "@/types";
+import { Criterion, Metric } from "@/types";
+import { competencyBand } from "@/lib/scoring";
 
 export const runtime = "nodejs";
 
 // ============================================================
 // POST /api/departments  (admin only)
-// Updates a KPI department's metric template (names, targets, units,
-// weights, direction; add/remove metrics), then propagates the new
+// Updates a department's scorecard template, then propagates the new
 // definitions to every employee record in the department — preserving
-// each person's recorded actuals/scores by metric id, zeroing new
-// metrics, dropping removed ones. Dated month history is untouched
-// (each month entry stores the weights it was recorded with).
-// Body: { departmentId, metrics: Metric[] }
+// each person's recorded values by id, zeroing new items, dropping
+// removed ones. Dated month history is untouched (each month entry
+// stores the weights it was recorded with).
+//
+// Body (one of):
+//   { departmentId, metrics: Metric[] }        KPI template
+//   { departmentId, criteria: Criterion[] }    competency template
 // ============================================================
 
 const zeroPeriods = { monthly: 0, quarterly: 0, yearly: 0 };
@@ -45,10 +48,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const { departmentId, metrics } = body as { departmentId: string; metrics: Metric[] };
-  if (!departmentId || !Array.isArray(metrics) || metrics.length === 0) {
+  const { departmentId, metrics, criteria } = body as {
+    departmentId: string;
+    metrics?: Metric[];
+    criteria?: Criterion[];
+  };
+  if (!departmentId) {
+    return NextResponse.json({ error: "Need departmentId." }, { status: 400 });
+  }
+
+  // ---- Competency template branch ----
+  if (Array.isArray(criteria)) {
+    return updateCompetencyTemplate(departmentId, criteria, actorUid, actorName);
+  }
+
+  if (!Array.isArray(metrics) || metrics.length === 0) {
     return NextResponse.json(
-      { error: "Need departmentId and a non-empty metrics array." },
+      { error: "Need a non-empty metrics (or criteria) array." },
       { status: 400 }
     );
   }
@@ -130,6 +146,112 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, metrics: template.length, employeesUpdated: touched });
+  } catch (e: any) {
+    return NextResponse.json({ error: `Write failed: ${e.message}` }, { status: 500 });
+  }
+}
+
+// Update a competency department's criteria template and rebuild every
+// employee's competency card against it — each person's recorded ratings
+// and comments are preserved by criterion id; new criteria start unrated.
+async function updateCompetencyTemplate(
+  departmentId: string,
+  criteria: Criterion[],
+  actorUid: string,
+  actorName: string
+) {
+  if (criteria.length === 0) {
+    return NextResponse.json(
+      { error: "A competency department needs at least one criterion." },
+      { status: 400 }
+    );
+  }
+  for (const c of criteria) {
+    if (!c.id || typeof c.id !== "string" || !c.name || typeof c.name !== "string") {
+      return NextResponse.json(
+        { error: "Every criterion needs an id and a name." },
+        { status: 400 }
+      );
+    }
+    if (typeof c.weight !== "number" || c.weight < 0) {
+      return NextResponse.json(
+        { error: `Criterion "${c.name}": weight must be a number ≥ 0.` },
+        { status: 400 }
+      );
+    }
+  }
+  const ids = criteria.map((c) => c.id);
+  if (new Set(ids).size !== ids.length) {
+    return NextResponse.json({ error: "Criterion ids must be unique." }, { status: 400 });
+  }
+
+  const deptRef = adminDb().collection("departments").doc(departmentId);
+  const deptSnap = await deptRef.get();
+  if (!deptSnap.exists) {
+    return NextResponse.json({ error: `Department "${departmentId}" not found.` }, { status: 404 });
+  }
+
+  // The template itself is unrated: numbers renumbered in order, scores 0.
+  const template: Criterion[] = criteria.map((c, i) => ({
+    id: c.id,
+    number: String(i + 1),
+    name: c.name,
+    descriptor: c.descriptor ?? "",
+    section: c.section ?? "",
+    weight: c.weight,
+    score: 0,
+    weighted: 0,
+    comments: "",
+  }));
+
+  try {
+    await deptRef.set(
+      { type: "competency", competency: { criteria: template, overall: 0, band: "" } },
+      { merge: true }
+    );
+
+    const empSnap = await deptRef.collection("employees").get();
+    const batch = adminDb().batch();
+    let touched = 0;
+    for (const doc of empSnap.docs) {
+      const emp = doc.data();
+      if (emp.type !== "competency") continue;
+      const prior: Criterion[] = emp.competency?.criteria ?? [];
+      const rebuilt = template.map((t) => {
+        const p = prior.find((x) => x.id === t.id);
+        const score = p?.score ?? 0;
+        return { ...t, score, weighted: t.weight * score, comments: p?.comments ?? "" };
+      });
+      const overall = rebuilt.reduce((s, c) => s + c.weighted, 0);
+      batch.set(
+        doc.ref,
+        {
+          competency: {
+            criteria: rebuilt,
+            overall,
+            band: overall > 0 ? competencyBand(overall) : "",
+          },
+        },
+        { merge: true }
+      );
+      touched++;
+    }
+    await batch.commit();
+
+    const auditRef = adminDb().collection("audit").doc();
+    await auditRef.set({
+      id: auditRef.id,
+      action: "update_employee",
+      actorUid,
+      actorName,
+      departmentId,
+      employeeId: departmentId,
+      employeeName: `${touched} employee record(s)`,
+      timestamp: Date.now(),
+      summary: `${actorName} edited the ${departmentId} competency criteria (${template.length} criteria), propagated to ${touched} employee(s)`,
+    });
+
+    return NextResponse.json({ ok: true, criteria: template.length, employeesUpdated: touched });
   } catch (e: any) {
     return NextResponse.json({ error: `Write failed: ${e.message}` }, { status: 500 });
   }
