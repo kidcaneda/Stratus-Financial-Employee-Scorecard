@@ -60,20 +60,20 @@ export async function POST(req: NextRequest) {
       departmentId = (d.departmentId as string) ?? null;
       name = (d.name as string) || name;
     } else {
-      // Fall back to an employee record carrying this email.
+      // Fall back to an employee record carrying this email. Plain
+      // collection-group read + in-memory match, so NO index is required.
       try {
-        const empSnap = await adminDb()
-          .collectionGroup("employees")
-          .where("email", "==", email)
-          .limit(1)
-          .get();
-        if (!empSnap.empty) {
+        const empSnap = await adminDb().collectionGroup("employees").get();
+        const match = empSnap.docs.find(
+          (d) => String(d.data().email ?? "").toLowerCase() === email
+        );
+        if (match) {
           role = "employee";
-          departmentId = (empSnap.docs[0].data().departmentId as string) ?? null;
-          name = (empSnap.docs[0].data().name as string) || name;
+          departmentId = (match.data().departmentId as string) ?? null;
+          name = (match.data().name as string) || name;
         }
       } catch {
-        // index missing — fall through to the domain check
+        // read failed — fall through to the domain check
       }
       if (!role && email.endsWith(`@${ALLOWED_DOMAIN}`)) {
         role = "employee"; // any company-domain address gets baseline access
@@ -103,19 +103,20 @@ export async function POST(req: NextRequest) {
     );
 
     // Link every employee record with this email to the account so the
-    // person sees their own evaluations.
+    // person sees their own evaluations. Plain read + in-memory match —
+    // no index required.
     let linked = 0;
     try {
-      const owned = await adminDb()
-        .collectionGroup("employees")
-        .where("email", "==", email)
-        .get();
-      const batch = adminDb().batch();
-      owned.docs.forEach((doc) => {
-        batch.set(doc.ref, { linkedUid: uid }, { merge: true });
-      });
-      await batch.commit();
-      linked = owned.size;
+      const all = await adminDb().collectionGroup("employees").get();
+      const owned = all.docs.filter(
+        (d) => String(d.data().email ?? "").toLowerCase() === email
+      );
+      if (owned.length) {
+        const batch = adminDb().batch();
+        owned.forEach((doc) => batch.set(doc.ref, { linkedUid: uid }, { merge: true }));
+        await batch.commit();
+      }
+      linked = owned.length;
     } catch {
       // linking is best-effort; role is already granted
     }

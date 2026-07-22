@@ -7,8 +7,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  query,
-  where,
 } from "firebase/firestore";
 import { db, firebaseReady } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
@@ -94,13 +92,14 @@ export function useMyTeam() {
         return;
       }
 
-      // 1. Direct reports (person-level link, spans departments). If the
-      //    collection-group index isn't deployed yet this read rejects —
-      //    treat that as "no direct links" rather than failing the page.
-      const directPromise = getDocs(
-        query(collectionGroup(db, "employees"), where("evaluatorUid", "==", user.uid))
-      ).then(
-        (snap) => snap.docs.map((d) => d.data() as Employee),
+      // 1. Direct reports (person-level link, spans departments). Uses a
+      //    plain collection-group read + in-memory filter so NO Firestore
+      //    index is required.
+      const directPromise = getDocs(collectionGroup(db, "employees")).then(
+        (snap) =>
+          snap.docs
+            .map((d) => d.data() as Employee)
+            .filter((e) => e.evaluatorUid === user.uid),
         () => [] as Employee[]
       );
 
