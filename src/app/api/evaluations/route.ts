@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { MonthlyEvaluation, AuditEntry, isDeptLead } from "@/types";
 import { sendEmail, evaluationEmail } from "@/lib/mailer";
+import { scoreMonth } from "@/lib/rollup";
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+// "2026-03" → "March 2026" for human-friendly email copy.
+function monthLabel(monthKey: string): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  return MONTHS[m - 1] ? `${MONTHS[m - 1]} ${y}` : monthKey;
+}
 
 export const runtime = "nodejs";
 
@@ -166,9 +177,12 @@ export async function POST(req: NextRequest) {
       const reviewUrl = `${appUrl}/my-evaluations`;
       const { subject, html } = evaluationEmail({
         employeeName: empName,
-        monthLabel: evaluation.monthKey,
+        monthLabel: monthLabel(evaluation.monthKey),
         evaluatorName: actor.name,
         reviewUrl,
+        overall: scoreMonth(evaluation),
+        entries: evaluation.entries,
+        grow: evaluation.grow,
       });
       const sent = await sendEmail({ to: empEmail, subject, html });
       if (sent.skipped) emailNote = "Email service not configured; notification skipped.";

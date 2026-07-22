@@ -222,6 +222,14 @@ export async function importDirectory(
             );
           }
         }
+        // Directory lookup doc — lets a lead self-provision to "supervisor"
+        // on first sign-in without waiting for an admin.
+        if (write) {
+          await adminDb().collection("directory").doc(leader).set(
+            { email: leader, role: "supervisor", departmentId: deptDoc.id, name: leaderName },
+            { merge: true }
+          );
+        }
         const assignRef = adminDb().collection("assignments").doc(leaderUid);
         const existing = await assignRef.get();
         const have: string[] = existing.exists
@@ -285,7 +293,14 @@ export async function importDirectory(
           `${leaderUid ? ` → reports to ${leaderName}` : ""}` +
           `${linked ? " (login linked)" : ""}`
       );
-      if (write) await ref.set(base, { merge: true });
+      if (write) {
+        await ref.set(base, { merge: true });
+        // Directory lookup doc for self-provisioning as "employee".
+        await adminDb().collection("directory").doc(email).set(
+          { email, role: "employee", departmentId: deptDoc.id, name: dir.name },
+          { merge: true }
+        );
+      }
     }
   }
 
