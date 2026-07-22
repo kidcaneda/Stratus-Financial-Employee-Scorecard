@@ -27,6 +27,7 @@ import {
   competencyBand,
 } from "@/lib/scoring";
 import { LiveScoreDial, StatusPill } from "@/components/ui";
+import { GrowInput, emptyGrow, hasGrow, trimGrow } from "@/components/GrowNotes";
 
 // ============================================================
 // Score-entry form for leaders (supervisors & admins).
@@ -171,6 +172,8 @@ function KpiEntry({
   // New employees auto-derive scores from actuals; editing an existing one
   // starts from their recorded scores so we don't clobber a manual override.
   const [auto, setAuto] = useState(!existing);
+  // GROW commentary is per-month, so each entry starts blank.
+  const [grow, setGrow] = useState(emptyGrow());
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -281,6 +284,7 @@ function KpiEntry({
       recordedBy: "",
       recordedByName: "",
       recordedAt: Date.now(),
+      ...(hasGrow(grow) ? { grow: trimGrow(grow) } : {}),
     };
     const evalResult = await saveMonthlyEvaluation(evaluation);
     setBusy(false);
@@ -419,6 +423,8 @@ function KpiEntry({
         })}
       </div>
 
+      <GrowInput value={grow} onChange={setGrow} />
+
       <p className="text-xs text-ink-muted">
         Quarterly & yearly scores are calculated automatically from the months
         you record — you only enter one month at a time.
@@ -446,6 +452,7 @@ function CompetencyEntry({
   const [name, setName] = useState(existing?.name ?? "");
   const [email, setEmail] = useState(existing?.email ?? "");
   const [role, setRole] = useState(existing?.role ?? "");
+  const [grow, setGrow] = useState(existing?.competency?.grow ?? emptyGrow());
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -496,6 +503,7 @@ function CompetencyEntry({
       criteria: criteria.map((c) => ({ ...c, weighted: c.weight * c.score })),
       overall,
       band,
+      ...(hasGrow(grow) ? { grow: trimGrow(grow) } : {}),
     };
     const employee: Employee = {
       id: existing?.id ?? newEmployeeId(name),
@@ -600,6 +608,8 @@ function CompetencyEntry({
           </div>
         ))}
       </div>
+
+      <GrowInput value={grow} onChange={setGrow} />
     </Shell>
   );
 }

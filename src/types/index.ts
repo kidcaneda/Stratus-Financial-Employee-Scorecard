@@ -44,11 +44,22 @@ export interface Criterion {
   comments: string;
 }
 
+// Structured evaluator commentary saved with an evaluation (GROW-style):
+// Goals, Realities (root cause), Opportunities (what could have been done
+// better), Way Forward (action plans).
+export interface GrowComments {
+  goals: string;
+  realities: string;
+  opportunities: string;
+  wayForward: string;
+}
+
 // A 1–5 competency scorecard (e.g. Accounting). Single-period review.
 export interface CompetencyCard {
   criteria: Criterion[];
   overall: number; // overall weighted score, out of 5.00
   band: string; // "Outstanding", "Exceeds", "Meets", etc.
+  grow?: GrowComments; // evaluator commentary for the latest review
 }
 
 // ============================================================
@@ -201,6 +212,8 @@ export interface MonthlyEvaluation {
   ackStatus?: AckStatus; // defaults to "pending" on creation
   employeeComment?: string;
   ackAt?: number; // when the employee responded
+  // Evaluator commentary recorded with this month's scores.
+  grow?: GrowComments;
 }
 
 // Quarter identifier: 1–4.

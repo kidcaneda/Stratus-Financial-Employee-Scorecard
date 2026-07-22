@@ -12,6 +12,7 @@ import { Period } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
 import { MonthlyTrend } from "@/components/MonthlyTrend";
 import { AnalyticsPanel } from "@/components/AnalyticsPanel";
+import { GrowDisplay, hasGrow } from "@/components/GrowNotes";
 
 export default function EmployeeDetailPage() {
   const { id, empId } = useParams<{ id: string; empId: string }>();
@@ -38,6 +39,14 @@ export default function EmployeeDetailPage() {
 
   const overall = scoreEmployee(emp, period);
 
+  // Latest evaluator commentary: the most recent month that carries GROW
+  // notes (KPI), or the competency review's notes.
+  const latestGrowMonth = [...months]
+    .sort((a, b) => b.monthKey.localeCompare(a.monthKey))
+    .find((m) => hasGrow(m.grow));
+  const competencyGrow =
+    emp.competency && hasGrow(emp.competency.grow) ? emp.competency.grow : undefined;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -63,6 +72,19 @@ export default function EmployeeDetailPage() {
 
       {/* Phase E: rule-based analytics derived from the time-series */}
       <AnalyticsPanel report={analyze(months)} />
+
+      {/* Evaluator's GROW commentary from the latest evaluation. */}
+      {latestGrowMonth && (
+        <GrowDisplay
+          grow={latestGrowMonth.grow!}
+          subtitle={`Recorded with the ${latestGrowMonth.monthKey} evaluation${
+            latestGrowMonth.recordedByName ? ` by ${latestGrowMonth.recordedByName}` : ""
+          }`}
+        />
+      )}
+      {!latestGrowMonth && competencyGrow && (
+        <GrowDisplay grow={competencyGrow} subtitle="From the latest competency review" />
+      )}
 
       {/* Overall */}
       <div className="card flex items-center gap-6 p-6">

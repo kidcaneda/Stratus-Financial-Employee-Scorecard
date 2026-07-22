@@ -9,6 +9,7 @@ import { respondToEvaluation } from "@/lib/employee-actions";
 import { scoreMonth } from "@/lib/rollup";
 import { statusClasses, statusFor, fmt } from "@/lib/scoring";
 import { StatusPill } from "@/components/ui";
+import { GROW_FIELDS, hasGrow } from "@/components/GrowNotes";
 
 // The employee's own evaluations across all months, with confirm/dispute.
 export default function MyEvaluationsPage() {
@@ -143,6 +144,22 @@ function EvaluationCard({ evaln }: { evaln: MonthlyEvaluation }) {
           </tbody>
         </table>
       </div>
+
+      {/* Evaluator's GROW commentary recorded with this month. */}
+      {hasGrow(evaln.grow) && (
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {GROW_FIELDS.filter((f) => (evaln.grow![f.key] ?? "").trim() !== "").map((f) => (
+            <div key={f.key} className="rounded-lg bg-panel-2 p-3">
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+                {f.label}
+              </div>
+              <p className="whitespace-pre-wrap text-sm text-ink-muted">
+                {evaln.grow![f.key]}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {done ? (
         <div
