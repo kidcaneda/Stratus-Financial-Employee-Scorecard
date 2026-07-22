@@ -12,7 +12,7 @@ import { Period } from "@/types";
 import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/ui";
 import { MonthlyTrend } from "@/components/MonthlyTrend";
 import { AnalyticsPanel } from "@/components/AnalyticsPanel";
-import { GrowDisplay, hasGrow } from "@/components/GrowNotes";
+import { GrowDisplay, GrowHistory, hasGrow } from "@/components/GrowNotes";
 
 export default function EmployeeDetailPage() {
   const { id, empId } = useParams<{ id: string; empId: string }>();
@@ -73,17 +73,8 @@ export default function EmployeeDetailPage() {
       {/* Phase E: rule-based analytics derived from the time-series */}
       <AnalyticsPanel report={analyze(months)} />
 
-      {/* Evaluator's GROW commentary — full history, newest first. */}
-      {growMonths.map((m) => (
-        <GrowDisplay
-          key={m.monthKey}
-          grow={m.grow!}
-          title={`Evaluator comments · ${m.monthKey}`}
-          subtitle={`Recorded with the ${m.monthKey} evaluation${
-            m.recordedByName ? ` by ${m.recordedByName}` : ""
-          }`}
-        />
-      ))}
+      {/* Evaluator's GROW commentary — pick a month, quarter, or all. */}
+      {growMonths.length > 0 && <GrowHistory growMonths={growMonths} />}
       {growMonths.length === 0 && competencyGrow && (
         <GrowDisplay grow={competencyGrow} subtitle="From the latest competency review" />
       )}
