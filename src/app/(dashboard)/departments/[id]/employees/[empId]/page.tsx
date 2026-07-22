@@ -39,11 +39,11 @@ export default function EmployeeDetailPage() {
 
   const overall = scoreEmployee(emp, period);
 
-  // Latest evaluator commentary: the most recent month that carries GROW
-  // notes (KPI), or the competency review's notes.
-  const latestGrowMonth = [...months]
-    .sort((a, b) => b.monthKey.localeCompare(a.monthKey))
-    .find((m) => hasGrow(m.grow));
+  // Evaluator commentary history: every month that carries GROW notes,
+  // newest first (KPI), plus the competency review's notes if any.
+  const growMonths = [...months]
+    .filter((m) => hasGrow(m.grow))
+    .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
   const competencyGrow =
     emp.competency && hasGrow(emp.competency.grow) ? emp.competency.grow : undefined;
 
@@ -73,16 +73,18 @@ export default function EmployeeDetailPage() {
       {/* Phase E: rule-based analytics derived from the time-series */}
       <AnalyticsPanel report={analyze(months)} />
 
-      {/* Evaluator's GROW commentary from the latest evaluation. */}
-      {latestGrowMonth && (
+      {/* Evaluator's GROW commentary — full history, newest first. */}
+      {growMonths.map((m) => (
         <GrowDisplay
-          grow={latestGrowMonth.grow!}
-          subtitle={`Recorded with the ${latestGrowMonth.monthKey} evaluation${
-            latestGrowMonth.recordedByName ? ` by ${latestGrowMonth.recordedByName}` : ""
+          key={m.monthKey}
+          grow={m.grow!}
+          title={`Evaluator comments · ${m.monthKey}`}
+          subtitle={`Recorded with the ${m.monthKey} evaluation${
+            m.recordedByName ? ` by ${m.recordedByName}` : ""
           }`}
         />
-      )}
-      {!latestGrowMonth && competencyGrow && (
+      ))}
+      {growMonths.length === 0 && competencyGrow && (
         <GrowDisplay grow={competencyGrow} subtitle="From the latest competency review" />
       )}
 
