@@ -8,6 +8,8 @@ import { scoreEmployee, fmt } from "@/lib/scoring";
 import { Employee, Period } from "@/types";
 import { PeriodSelector, StatusPill, MockBanner } from "@/components/ui";
 import { EvaluationForm } from "@/components/EvaluationForm";
+import { ChallengesBanner } from "@/components/ChallengesBanner";
+import { useOpenChallenges } from "@/hooks/useOpenChallenges";
 
 // ============================================================
 // Audit (admin only) — utilization & performance across ALL employees.
@@ -35,6 +37,7 @@ const RECENCY_LABEL: Record<Recency, string> = {
 export default function AuditPage() {
   const { user } = useAuth();
   const { employees, departments, isMock, loading, refresh } = useAllEmployees();
+  const { challenges } = useOpenChallenges(employees);
   const [period, setPeriod] = useState<Period>("monthly");
   const [filter, setFilter] = useState<Recency | "all">("all");
   const [query, setQuery] = useState("");
@@ -60,6 +63,10 @@ export default function AuditPage() {
 
   const deptName = (id: string) =>
     departments.find((d) => d.id === id)?.name ?? id;
+
+  // Open challenges per employee, for the row badges.
+  const challengeCount = (deptId: string, empId: string) =>
+    challenges.filter((c) => c.departmentId === deptId && c.employeeId === empId).length;
 
   const rows: AuditRow[] = employees.map((e) => {
     const res = scoreEmployee(e, period);
@@ -95,12 +102,13 @@ export default function AuditPage() {
   const exportCsv = () => {
     const header = [
       "Name", "Email", "Department", "Role", "Evaluator",
-      `Score (${period})`, "Status", "Coverage", "Last updated",
+      `Score (${period})`, "Status", "Coverage", "Open challenges", "Last updated",
     ];
     const lines = visible.map((r) =>
       [
         r.e.name, r.e.email, r.deptName, r.e.role, r.e.evaluatorName ?? "",
         fmt(r.score, 1), r.status, RECENCY_LABEL[r.recency],
+        challengeCount(r.e.departmentId, r.e.id),
         r.e.updatedAt ? new Date(r.e.updatedAt).toISOString() : "",
       ]
         .map((v) => `"${String(v).replace(/"/g, '""')}"`)
@@ -134,6 +142,9 @@ export default function AuditPage() {
       </div>
 
       {isMock && <MockBanner />}
+
+      {/* Challenged evaluations still awaiting a response. */}
+      <ChallengesBanner challenges={challenges} />
 
       {/* Coverage tiles double as filters. */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -210,7 +221,14 @@ export default function AuditPage() {
             {visible.map((r) => (
               <tr key={`${r.e.departmentId}/${r.e.id}`} className="hover:bg-panel-2">
                 <td className="px-4 py-3">
-                  <div className="font-medium text-ink">{r.e.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-ink">{r.e.name}</span>
+                    {challengeCount(r.e.departmentId, r.e.id) > 0 && (
+                      <span className="pill bg-signal-amberbg text-signal-amber">
+                        {challengeCount(r.e.departmentId, r.e.id)} challenged
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-ink-muted">{r.e.role}</div>
                 </td>
                 <td className="px-4 py-3 text-ink-muted">{r.deptName}</td>

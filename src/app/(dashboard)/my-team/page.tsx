@@ -8,6 +8,8 @@ import { scoreEmployee, fmt } from "@/lib/scoring";
 import { Employee, Period, isDeptLead } from "@/types";
 import { PeriodSelector, StatusPill, MockBanner } from "@/components/ui";
 import { EvaluationForm } from "@/components/EvaluationForm";
+import { ChallengesBanner } from "@/components/ChallengesBanner";
+import { useOpenChallenges } from "@/hooks/useOpenChallenges";
 
 // ============================================================
 // My Team — the one place a supervisor/manager scores the people who
@@ -19,6 +21,7 @@ import { EvaluationForm } from "@/components/EvaluationForm";
 export default function MyTeamPage() {
   const { user } = useAuth();
   const { groups, isMock, loading, refresh } = useMyTeam();
+  const { challenges } = useOpenChallenges(groups.flatMap((g) => g.employees));
   const [period, setPeriod] = useState<Period>("monthly");
   // Which report is being scored: a department plus an employee (or null
   // for a brand-new hire in that department).
@@ -50,6 +53,9 @@ export default function MyTeamPage() {
       </div>
 
       {isMock && <MockBanner />}
+
+      {/* Challenges waiting on you, so they don't need hunting for. */}
+      <ChallengesBanner challenges={challenges} />
 
       {groups.length === 0 && (
         <div className="card p-8 text-center">
