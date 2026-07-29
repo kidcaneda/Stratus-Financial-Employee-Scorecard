@@ -57,12 +57,82 @@ export default function SettingsPage() {
         </button>
       </div>
 
+      <EmailCard />
+
       <div className="card space-y-3 p-6">
         <h2 className="text-base font-semibold text-ink">Access roles</h2>
         <RoleRow role="Admin" desc="Full access — run sync, edit thresholds, manage users." />
         <RoleRow role="Manager / Supervisor" desc="View own department and team scorecards; score assigned employees." />
         <RoleRow role="Employee" desc="View own scorecard only." />
       </div>
+    </div>
+  );
+}
+
+// Admin email-notification status + test send. The credential itself
+// lives in server env vars (never in the browser or the database); this
+// just confirms it's wired up.
+function EmailCard() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{
+    ok: boolean;
+    transport?: string;
+    to?: string;
+    error?: string;
+  } | null>(null);
+
+  const sendTest = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const token = await (await import("@/lib/firebase")).auth.currentUser?.getIdToken();
+      const res = await fetch("/api/email-test", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      setResult(data);
+    } catch (e: any) {
+      setResult({ ok: false, error: e.message || "Request failed." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card space-y-3 p-6">
+      <h2 className="text-base font-semibold text-ink">Email notifications</h2>
+      <p className="text-sm text-ink-muted">
+        Evaluated employees are emailed their scores and comments. Configure a
+        sender in your server environment — the recommended, no-domain option is
+        SMTP through an existing mailbox (e.g. a Google Workspace{" "}
+        <code className="text-ink">@stratus.finance</code> account with an app
+        password): set <code className="text-ink">SMTP_HOST</code>,{" "}
+        <code className="text-ink">SMTP_USER</code>,{" "}
+        <code className="text-ink">SMTP_PASS</code>, and{" "}
+        <code className="text-ink">EMAIL_FROM</code>.
+      </p>
+      <button onClick={sendTest} disabled={busy} className="btn-primary">
+        {busy ? "Sending…" : "Send test email to myself"}
+      </button>
+      {result && (
+        <div
+          className={`rounded-lg px-4 py-3 text-sm ${
+            result.ok
+              ? "bg-signal-greenbg text-signal-green"
+              : "bg-signal-redbg text-signal-red"
+          }`}
+        >
+          {result.ok ? (
+            <>
+              Sent to <strong>{result.to}</strong> via the{" "}
+              <strong>{result.transport}</strong> transport. Check your inbox.
+            </>
+          ) : (
+            <>{result.error || "Send failed."}</>
+          )}
+        </div>
+      )}
     </div>
   );
 }

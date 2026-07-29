@@ -1,33 +1,77 @@
 // ============================================================
-// Email delivery via Resend (server-side only).
-// Degrades gracefully: if RESEND_API_KEY is not set, sends are
-// skipped and logged, so the app works before email is configured.
-// Set these env vars in Vercel when ready:
-//   RESEND_API_KEY  — from resend.com dashboard
-//   EMAIL_FROM      — verified sender, e.g. "Stratus <noreply@yourdomain>"
-//   APP_URL         — base URL of the deployed app, for links in emails
+// Email delivery (server-side only). Two transports, tried in order,
+// so you can pick whichever fits — no code change:
+//
+//  1. SMTP  (RECOMMENDED — no domain purchase, no DNS verification)
+//     Send through an existing mailbox with an app password, e.g. a
+//     Google Workspace @stratus.finance account or any Gmail:
+//       SMTP_HOST=smtp.gmail.com
+//       SMTP_PORT=465
+//       SMTP_USER=notifications@stratus.finance   (the real mailbox)
+//       SMTP_PASS=xxxxxxxxxxxxxxxx                 (a Google App Password)
+//       EMAIL_FROM=Stratus Scorecard <notifications@stratus.finance>
+//     Email is sent AS that mailbox, so it reaches anyone with no DNS.
+//
+//  2. Resend (needs a verified sending domain):
+//       RESEND_API_KEY, EMAIL_FROM
+//
+// If neither is configured, sends are skipped and logged so writes
+// still succeed. Set APP_URL for the links in emails.
 // ============================================================
+
+import nodemailer from "nodemailer";
 
 interface SendResult {
   ok: boolean;
   skipped?: boolean;
   error?: string;
+  transport?: "smtp" | "resend";
 }
 
-export async function sendEmail(opts: {
+// Which transport is configured, for the admin status card.
+export function emailTransport(): "smtp" | "resend" | "none" {
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return "smtp";
+  if (process.env.RESEND_API_KEY) return "resend";
+  return "none";
+}
+
+async function sendViaSmtp(opts: {
   to: string;
   subject: string;
   html: string;
 }): Promise<SendResult> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM || "Stratus Scorecard <onboarding@resend.dev>";
-
-  // No key configured yet → skip silently so the write still succeeds.
-  if (!apiKey) {
-    console.log(`[email skipped: no RESEND_API_KEY] would send to ${opts.to}: ${opts.subject}`);
-    return { ok: true, skipped: true };
+  const host = process.env.SMTP_HOST!;
+  const user = process.env.SMTP_USER!;
+  const pass = process.env.SMTP_PASS!;
+  const port = Number(process.env.SMTP_PORT || 465);
+  // Gmail rewrites From to the authenticated mailbox, so default to it.
+  const from = process.env.EMAIL_FROM || user;
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465, // 465 = implicit TLS; 587 = STARTTLS
+      auth: { user, pass },
+    });
+    await transporter.sendMail({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+    });
+    return { ok: true, transport: "smtp" };
+  } catch (e: any) {
+    return { ok: false, error: `SMTP: ${e.message}`, transport: "smtp" };
   }
+}
 
+async function sendViaResend(opts: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<SendResult> {
+  const apiKey = process.env.RESEND_API_KEY!;
+  const from = process.env.EMAIL_FROM || "Stratus Scorecard <onboarding@resend.dev>";
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -35,21 +79,28 @@ export async function sendEmail(opts: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from,
-        to: opts.to,
-        subject: opts.subject,
-        html: opts.html,
-      }),
+      body: JSON.stringify({ from, to: opts.to, subject: opts.subject, html: opts.html }),
     });
     if (!res.ok) {
       const text = await res.text();
-      return { ok: false, error: `Resend ${res.status}: ${text}` };
+      return { ok: false, error: `Resend ${res.status}: ${text}`, transport: "resend" };
     }
-    return { ok: true };
+    return { ok: true, transport: "resend" };
   } catch (e: any) {
-    return { ok: false, error: e.message };
+    return { ok: false, error: e.message, transport: "resend" };
   }
+}
+
+export async function sendEmail(opts: {
+  to: string;
+  subject: string;
+  html: string;
+}): Promise<SendResult> {
+  const transport = emailTransport();
+  if (transport === "smtp") return sendViaSmtp(opts);
+  if (transport === "resend") return sendViaResend(opts);
+  console.log(`[email skipped: no transport configured] would send to ${opts.to}: ${opts.subject}`);
+  return { ok: true, skipped: true };
 }
 
 // Minimal shapes the email renderer needs (kept local so the mailer has
