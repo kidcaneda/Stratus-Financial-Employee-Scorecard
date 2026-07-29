@@ -198,6 +198,16 @@ export interface MonthlyMetricEntry {
 // Employee response to an evaluation (Phase D).
 export type AckStatus = "pending" | "acknowledged" | "disputed";
 
+// How a leader closed out a challenged evaluation: the score stands as
+// recorded, or it was revised. Written by /api/resolve-challenge.
+export interface ChallengeResolution {
+  outcome: "upheld" | "revised";
+  comment: string; // the leader's explanation, shown to the employee
+  by: string; // resolver uid
+  byName: string;
+  at: number; // epoch millis
+}
+
 // A full monthly evaluation snapshot for one employee.
 // Stored at departments/{deptId}/employees/{empId}/months/{monthKey}.
 export interface MonthlyEvaluation {
@@ -214,6 +224,8 @@ export interface MonthlyEvaluation {
   ackAt?: number; // when the employee responded
   // Evaluator commentary recorded with this month's scores.
   grow?: GrowComments;
+  // Set when a leader closes out a challenge on this evaluation.
+  resolution?: ChallengeResolution;
 }
 
 // Quarter identifier: 1–4.

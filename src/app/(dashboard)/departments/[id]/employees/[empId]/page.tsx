@@ -13,12 +13,16 @@ import { PeriodSelector, StatusPill, ScoreRing, MockBanner } from "@/components/
 import { MonthlyTrend } from "@/components/MonthlyTrend";
 import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { GrowDisplay, GrowHistory, hasGrow } from "@/components/GrowNotes";
+import { EmployeeResponses } from "@/components/EmployeeResponses";
+import { useAuth } from "@/hooks/useAuth";
+import { isDeptLead } from "@/types";
 
 export default function EmployeeDetailPage() {
   const { id, empId } = useParams<{ id: string; empId: string }>();
   const { departments } = useDepartments();
   const { employees, isMock, loading } = useEmployees(id);
   const { months } = useMonthlyEvaluations(id, empId);
+  const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("monthly");
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
@@ -45,11 +49,9 @@ export default function EmployeeDetailPage() {
     .filter((m) => hasGrow(m.grow))
     .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
 
-  // The employee's own responses (accepted / challenged), newest first.
-  const responses = [...months]
-    .filter((m) => m.ackStatus && m.ackStatus !== "pending")
-    .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-  const challenges = responses.filter((m) => m.ackStatus === "disputed").length;
+  // Leaders and admins can close out a challenge (the server re-checks
+  // the specific permission).
+  const canResolve = user?.role === "admin" || isDeptLead(user?.role);
   const competencyGrow =
     emp.competency && hasGrow(emp.competency.grow) ? emp.competency.grow : undefined;
 
@@ -79,45 +81,12 @@ export default function EmployeeDetailPage() {
       {/* Phase E: rule-based analytics derived from the time-series */}
       <AnalyticsPanel report={analyze(months)} />
 
-      {/* What the employee said back: accepted / challenged + comment. */}
-      {responses.length > 0 && (
-        <div className="card p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-ink">Employee responses</h3>
-            {challenges > 0 && (
-              <span className="pill bg-signal-amberbg text-signal-amber">
-                {challenges} challenged
-              </span>
-            )}
-          </div>
-          <div className="space-y-2">
-            {responses.map((m) => (
-              <div
-                key={m.monthKey}
-                className="flex flex-wrap items-start gap-3 rounded-lg bg-panel-2 p-3"
-              >
-                <span className="text-sm font-medium tabular-nums text-ink">
-                  {m.monthKey}
-                </span>
-                <span
-                  className={`pill ${
-                    m.ackStatus === "acknowledged"
-                      ? "bg-signal-greenbg text-signal-green"
-                      : "bg-signal-amberbg text-signal-amber"
-                  }`}
-                >
-                  {m.ackStatus === "acknowledged" ? "Accepted" : "Challenged"}
-                </span>
-                {m.employeeComment && (
-                  <p className="min-w-[12rem] flex-1 whitespace-pre-wrap text-sm text-ink-muted">
-                    “{m.employeeComment}”
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Employee responses — and the controls to resolve a challenge. */}
+      <EmployeeResponses
+        months={months}
+        canResolve={canResolve}
+        onResolved={() => window.location.reload()}
+      />
 
       {/* Evaluator's GROW commentary — pick a month, quarter, or all. */}
       {growMonths.length > 0 && <GrowHistory growMonths={growMonths} />}

@@ -151,6 +151,29 @@ function EvaluationCard({ evaln }: { evaln: MonthlyEvaluation }) {
         </div>
       )}
 
+      {/* Your evaluator's answer to a challenge you raised. */}
+      {evaln.resolution && (
+        <div className="mb-4 rounded-lg border border-hairline bg-panel-2 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`pill ${
+                evaln.resolution.outcome === "upheld"
+                  ? "bg-panel text-ink-soft"
+                  : "bg-accent/15 text-accent"
+              }`}
+            >
+              {evaln.resolution.outcome === "upheld" ? "Score upheld" : "Score revised"}
+            </span>
+            <span className="text-xs text-ink-muted">
+              Response from {evaln.resolution.byName}
+            </span>
+          </div>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-ink-muted">
+            {evaln.resolution.comment}
+          </p>
+        </div>
+      )}
+
       {done ? (
         <div
           className={`rounded-lg px-4 py-3 text-sm ${
@@ -166,15 +189,17 @@ function EvaluationCard({ evaln }: { evaln: MonthlyEvaluation }) {
           {savedComment && (
             <p className="mt-1 whitespace-pre-wrap text-ink-muted">“{savedComment}”</p>
           )}
-          <button
-            onClick={() => {
-              setDone(false);
-              setError("");
-            }}
-            className="mt-2 text-xs underline opacity-80 hover:opacity-100"
-          >
-            Change my response
-          </button>
+          {!evaln.resolution && (
+            <button
+              onClick={() => {
+                setDone(false);
+                setError("");
+              }}
+              className="mt-2 text-xs underline opacity-80 hover:opacity-100"
+            >
+              Change my response
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

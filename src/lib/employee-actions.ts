@@ -29,6 +29,30 @@ export async function saveEmployee(
   }
 }
 
+// ---- Leader closes out an employee's challenge ----
+export async function resolveChallenge(opts: {
+  departmentId: string;
+  employeeId: string;
+  monthKey: string;
+  outcome: "upheld" | "revised";
+  comment: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return { ok: false, error: "You're not signed in." };
+    const res = await fetch("/api/resolve-challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(opts),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || "Failed." };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message || "Network error." };
+  }
+}
+
 // Syncs the signed-in account's access from the company directory:
 // resolves role + department by email and links their employee record.
 // Call right after sign-in / sign-up, then refresh the ID token so the
