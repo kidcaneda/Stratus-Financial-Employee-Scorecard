@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { collection, collectionGroup, getDocs } from "firebase/firestore";
-import { db, firebaseReady } from "@/lib/firebase";
-import { useAuth } from "@/hooks/useAuth";
-import { Employee, MonthlyEvaluation, AckStatus } from "@/types";
+import { useMemo, useState } from "react";
+import { useMyRecord } from "@/hooks/useMyRecord";
+import { MonthlyEvaluation, AckStatus } from "@/types";
 import { respondToEvaluation } from "@/lib/employee-actions";
 import { scoreMonth } from "@/lib/rollup";
 import { statusClasses, statusFor, fmt } from "@/lib/scoring";
@@ -21,61 +19,16 @@ import { GROW_FIELDS, hasGrow } from "@/components/GrowNotes";
 // ============================================================
 
 export default function MyEvaluationsPage() {
-  const { user, loading: authLoading } = useAuth();
-  const [evals, setEvals] = useState<MonthlyEvaluation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { records, loading } = useMyRecord();
 
-  useEffect(() => {
-    if (authLoading) return;
-    let cancelled = false;
-
-    (async () => {
-      setLoading(true);
-      if (!firebaseReady || !user) {
-        if (!cancelled) {
-          setEvals([]);
-          setLoading(false);
-        }
-        return;
-      }
-      try {
-        // 1. Which employee record(s) are me?
-        const empSnap = await getDocs(collectionGroup(db, "employees"));
-        const email = (user.email || "").toLowerCase();
-        const mine = empSnap.docs
-          .map((d) => d.data() as Employee)
-          .filter(
-            (e) =>
-              (e.linkedUid && e.linkedUid === user.uid) ||
-              (!!email && (e.email || "").toLowerCase() === email)
-          );
-
-        // 2. Read only my own months.
-        const monthLists = await Promise.all(
-          mine.map((e) =>
-            getDocs(
-              collection(db, "departments", e.departmentId, "employees", e.id, "months")
-            ).then(
-              (s) => s.docs.map((d) => d.data() as MonthlyEvaluation),
-              () => [] as MonthlyEvaluation[]
-            )
-          )
-        );
-        if (cancelled) return;
-        setEvals(
-          monthLists.flat().sort((a, b) => b.monthKey.localeCompare(a.monthKey))
-        );
-      } catch {
-        if (!cancelled) setEvals([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user, authLoading]);
+  // Only this account's own months, newest first.
+  const evals: MonthlyEvaluation[] = useMemo(
+    () =>
+      records
+        .flatMap((r) => r.months)
+        .sort((a, b) => b.monthKey.localeCompare(a.monthKey)),
+    [records]
+  );
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
 
