@@ -1,29 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collectionGroup, getDocs, query, where } from "firebase/firestore";
+import { collection, collectionGroup, getDocs } from "firebase/firestore";
 import { db, firebaseReady } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
-import { MonthlyEvaluation, AckStatus } from "@/types";
+import { Employee, MonthlyEvaluation, AckStatus } from "@/types";
 import { respondToEvaluation } from "@/lib/employee-actions";
 import { scoreMonth } from "@/lib/rollup";
 import { statusClasses, statusFor, fmt } from "@/lib/scoring";
 import { StatusPill } from "@/components/ui";
 import { GROW_FIELDS, hasGrow } from "@/components/GrowNotes";
 
-// The employee's own evaluations across all months, with confirm/dispute.
+// ============================================================
+// My Evaluations — the employee's own evaluations, where they can
+// accept the score, challenge it, and leave a comment either way.
+//
+// Only the signed-in person's own records are loaded: we first find the
+// employee record(s) linked to this account (by linkedUid, falling back
+// to a company-email match), then read only those months subcollections.
+// ============================================================
+
 export default function MyEvaluationsPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [evals, setEvals] = useState<MonthlyEvaluation[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load this employee's evaluations. Employee records store `linkedUid`;
-  // months live in subcollections, so we use a collectionGroup query.
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return;
     let cancelled = false;
+
     (async () => {
-      if (!firebaseReady) {
+      setLoading(true);
+      if (!firebaseReady || !user) {
         if (!cancelled) {
           setEvals([]);
           setLoading(false);
@@ -31,45 +39,71 @@ export default function MyEvaluationsPage() {
         return;
       }
       try {
-        // months don't carry the uid, so we filter by employeeId after a
-        // lookup. For simplicity we query all months and match by the
-        // employee's linked record id resolved from the user profile.
-        const snap = await getDocs(collectionGroup(db, "months"));
+        // 1. Which employee record(s) are me?
+        const empSnap = await getDocs(collectionGroup(db, "employees"));
+        const email = (user.email || "").toLowerCase();
+        const mine = empSnap.docs
+          .map((d) => d.data() as Employee)
+          .filter(
+            (e) =>
+              (e.linkedUid && e.linkedUid === user.uid) ||
+              (!!email && (e.email || "").toLowerCase() === email)
+          );
+
+        // 2. Read only my own months.
+        const monthLists = await Promise.all(
+          mine.map((e) =>
+            getDocs(
+              collection(db, "departments", e.departmentId, "employees", e.id, "months")
+            ).then(
+              (s) => s.docs.map((d) => d.data() as MonthlyEvaluation),
+              () => [] as MonthlyEvaluation[]
+            )
+          )
+        );
         if (cancelled) return;
-        const mine = snap.docs
-          .map((d) => d.data() as MonthlyEvaluation)
-          .filter((m) => m.employeeId && user.departmentId)
-          // Best-effort match: same department; refined by linkedUid server-side.
-          .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-        setEvals(mine);
+        setEvals(
+          monthLists.flat().sort((a, b) => b.monthKey.localeCompare(a.monthKey))
+        );
       } catch {
         if (!cancelled) setEvals([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, authLoading]);
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
+
+  const pending = evals.filter((e) => (e.ackStatus ?? "pending") === "pending").length;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-ink">My Evaluations</h1>
         <p className="text-sm text-ink-muted">
-          Review each evaluation, then confirm it or raise a concern.
+          Review each evaluation, then accept it or challenge it — you can leave
+          a comment either way.
+          {pending > 0 && (
+            <span className="ml-1 text-signal-amber">
+              {pending} awaiting your response.
+            </span>
+          )}
         </p>
       </div>
 
       {evals.length === 0 ? (
         <div className="card p-8 text-center text-sm text-ink-muted">
-          You don't have any evaluations to review yet.
+          You don&apos;t have any evaluations to review yet.
         </div>
       ) : (
-        evals.map((e) => <EvaluationCard key={`${e.employeeId}-${e.monthKey}`} evaln={e} />)
+        evals.map((e) => (
+          <EvaluationCard key={`${e.departmentId}-${e.employeeId}-${e.monthKey}`} evaln={e} />
+        ))
       )}
     </div>
   );
@@ -78,9 +112,10 @@ export default function MyEvaluationsPage() {
 function EvaluationCard({ evaln }: { evaln: MonthlyEvaluation }) {
   const [status, setStatus] = useState<AckStatus>(evaln.ackStatus ?? "pending");
   const [comment, setComment] = useState(evaln.employeeComment ?? "");
-  const [busy, setBusy] = useState(false);
+  const [savedComment, setSavedComment] = useState(evaln.employeeComment ?? "");
+  const [busy, setBusy] = useState<"acknowledged" | "disputed" | null>(null);
   const [error, setError] = useState("");
-  const [done, setDone] = useState(status !== "pending");
+  const [done, setDone] = useState((evaln.ackStatus ?? "pending") !== "pending");
 
   const score = scoreMonth(evaln);
   const st = statusFor(score);
@@ -88,11 +123,12 @@ function EvaluationCard({ evaln }: { evaln: MonthlyEvaluation }) {
 
   const respond = async (newStatus: "acknowledged" | "disputed") => {
     setError("");
+    // A challenge must explain itself; accepting a score may stand alone.
     if (newStatus === "disputed" && !comment.trim()) {
-      setError("Please explain your concern before disputing.");
+      setError("Please explain what you're challenging before submitting.");
       return;
     }
-    setBusy(true);
+    setBusy(newStatus);
     const res = await respondToEvaluation({
       departmentId: evaln.departmentId,
       employeeId: evaln.employeeId,
@@ -100,12 +136,13 @@ function EvaluationCard({ evaln }: { evaln: MonthlyEvaluation }) {
       status: newStatus,
       comment: comment.trim() || undefined,
     });
-    setBusy(false);
+    setBusy(null);
     if (!res.ok) {
       setError(res.error ?? "Failed to submit.");
       return;
     }
     setStatus(newStatus);
+    setSavedComment(comment.trim());
     setDone(true);
   };
 
@@ -169,32 +206,52 @@ function EvaluationCard({ evaln }: { evaln: MonthlyEvaluation }) {
               : "bg-signal-amberbg text-signal-amber"
           }`}
         >
-          You <strong>{status}</strong> this evaluation
-          {evaln.employeeComment ? `: “${evaln.employeeComment}”` : "."}
+          <div>
+            You <strong>{status === "acknowledged" ? "accepted" : "challenged"}</strong>{" "}
+            this evaluation.
+          </div>
+          {savedComment && (
+            <p className="mt-1 whitespace-pre-wrap text-ink-muted">“{savedComment}”</p>
+          )}
+          <button
+            onClick={() => {
+              setDone(false);
+              setError("");
+            }}
+            className="mt-2 text-xs underline opacity-80 hover:opacity-100"
+          >
+            Change my response
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
+          <label className="block text-sm font-medium text-ink">
+            Your comment
+            <span className="ml-1 font-normal text-ink-muted">
+              (optional when accepting, required when challenging)
+            </span>
+          </label>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Optional comment (required if you dispute)…"
-            className="h-20 w-full resize-none rounded-lg border border-hairline p-3 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            placeholder="Share your perspective on this evaluation…"
+            className="h-24 w-full resize-none rounded-lg border border-hairline bg-panel-2 p-3 text-sm text-ink placeholder:text-ink-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
           />
           {error && <p className="text-sm text-signal-red">{error}</p>}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={() => respond("acknowledged")}
-              disabled={busy}
+              disabled={!!busy}
               className="btn-primary"
             >
-              {busy ? "Submitting…" : "Confirm & accept"}
+              {busy === "acknowledged" ? "Submitting…" : "Accept evaluation"}
             </button>
             <button
               onClick={() => respond("disputed")}
-              disabled={busy}
-              className="btn-ghost"
+              disabled={!!busy}
+              className="rounded-lg border border-signal-amber/40 px-4 py-2 text-sm font-medium text-signal-amber transition-colors hover:bg-signal-amber/10"
             >
-              Dispute / request changes
+              {busy === "disputed" ? "Submitting…" : "Challenge evaluation"}
             </button>
           </div>
         </div>

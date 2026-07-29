@@ -22,10 +22,12 @@ export async function POST(req: NextRequest) {
 
   let uid: string;
   let actorName: string;
+  let actorEmail: string;
   try {
     const d = await adminAuth().verifyIdToken(token);
     uid = d.uid;
     actorName = (d.name as string) || d.email || "Employee";
+    actorEmail = ((d.email as string) || "").toLowerCase();
   } catch (e: any) {
     return NextResponse.json({ error: `Token failed: ${e.message}` }, { status: 401 });
   }
@@ -76,8 +78,15 @@ export async function POST(req: NextRequest) {
   if (!empSnap.exists) {
     return NextResponse.json({ error: "Employee not found." }, { status: 404 });
   }
-  const linkedUid = empSnap.data()?.linkedUid;
-  if (linkedUid && linkedUid !== uid) {
+  // Ownership must be positively established — never assume. When the
+  // record has a linkedUid it must be this account; otherwise fall back
+  // to matching the record's email against the token's verified email.
+  const linkedUid = empSnap.data()?.linkedUid as string | undefined;
+  const empEmail = String(empSnap.data()?.email ?? "").toLowerCase();
+  const isOwner = linkedUid
+    ? linkedUid === uid
+    : !!actorEmail && actorEmail === empEmail;
+  if (!isOwner) {
     return NextResponse.json(
       { error: "You can only respond to your own evaluation." },
       { status: 403 }
