@@ -12,6 +12,7 @@ import {
   Tooltip,
 } from "recharts";
 import { useDepartments } from "@/hooks/useDepartments";
+import { useMyScope, scopeDepartments } from "@/hooks/useMyScope";
 import { useAuth } from "@/hooks/useAuth";
 import { scoreDepartment, fmt } from "@/lib/scoring";
 import { Period } from "@/types";
@@ -21,11 +22,16 @@ import { Gauge } from "@/components/Gauge";
 import { GreetingHeader, EncouragementChip, Podium, RankedItem } from "@/components/Dashboard";
 
 export default function OverviewPage() {
-  const { departments, isMock, loading } = useDepartments();
+  const { departments: all, isMock, loading } = useDepartments();
+  const { departmentIds, loading: scopeLoading } = useMyScope();
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("monthly");
 
-  if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
+  if (loading || scopeLoading)
+    return <div className="text-sm text-ink-muted">Loading…</div>;
+
+  // A lead's overview covers their own departments; an admin's, all of them.
+  const departments = scopeDepartments(all, departmentIds);
 
   const scored = departments.map((d) => {
     const res = scoreDepartment(d, period);

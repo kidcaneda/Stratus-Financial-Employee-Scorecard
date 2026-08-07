@@ -3,22 +3,32 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useDepartments } from "@/hooks/useDepartments";
+import { useMyScope, scopeDepartments } from "@/hooks/useMyScope";
 import { scoreDepartment, fmt } from "@/lib/scoring";
 import { Period } from "@/types";
 import { PeriodSelector, StatusPill, MockBanner } from "@/components/ui";
 
 export default function DepartmentsPage() {
-  const { departments, isMock, loading } = useDepartments();
+  const { departments: all, isMock, loading } = useDepartments();
+  const { departmentIds, loading: scopeLoading } = useMyScope();
   const [period, setPeriod] = useState<Period>("monthly");
 
-  if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
+  if (loading || scopeLoading)
+    return <div className="text-sm text-ink-muted">Loading…</div>;
+
+  // Leads and employees only see the departments they're tagged to.
+  const departments = scopeDepartments(all, departmentIds);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-ink">Departments</h1>
-          <p className="text-sm text-ink-muted">Select a department to view its scorecard</p>
+          <p className="text-sm text-ink-muted">
+            {departmentIds === null
+              ? "Select a department to view its scorecard"
+              : `Your department${departments.length === 1 ? "" : "s"} — select one to view its scorecard`}
+          </p>
         </div>
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
@@ -66,6 +76,16 @@ export default function DepartmentsPage() {
           );
         })}
       </div>
+
+      {departments.length === 0 && (
+        <div className="card p-8 text-center">
+          <h2 className="text-base font-semibold text-ink">No departments yet</h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-ink-muted">
+            You aren&apos;t tagged to a department yet. An admin can assign you
+            one by running the directory import or granting you a department.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

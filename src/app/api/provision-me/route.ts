@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { isDeptLead } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -57,8 +58,25 @@ export async function POST(req: NextRequest) {
     if (dirSnap.exists) {
       const d = dirSnap.data()!;
       role = (d.role as string) || "employee";
-      departmentId = (d.departmentId as string) ?? null;
+      const leadIds = (d.departmentIds as string[]) ?? [];
+      departmentId = (d.departmentId as string) ?? leadIds[0] ?? null;
       name = (d.name as string) || name;
+      // Materialize a lead's departments as a uid-keyed assignment so the
+      // rest of the app (and Firestore rules) can authorize by uid.
+      if (leadIds.length && isDeptLead(role)) {
+        const assignRef = adminDb().collection("assignments").doc(uid);
+        const existing = await assignRef.get();
+        const have: string[] = existing.exists
+          ? existing.data()?.departmentIds ?? []
+          : [];
+        const merged = [...new Set([...have, ...leadIds])];
+        if (merged.length !== have.length) {
+          await assignRef.set(
+            { uid, managerName: name, departmentIds: merged },
+            { merge: true }
+          );
+        }
+      }
     } else {
       // Fall back to an employee record carrying this email. Plain
       // collection-group read + in-memory match, so NO index is required.

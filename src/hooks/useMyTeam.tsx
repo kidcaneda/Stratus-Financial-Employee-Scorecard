@@ -95,19 +95,37 @@ export function useMyTeam() {
       // 1. Direct reports (person-level link, spans departments). Uses a
       //    plain collection-group read + in-memory filter so NO Firestore
       //    index is required.
+      //    Matches on evaluatorUid AND evaluatorEmail — the email link is
+      //    set by the directory import and works even if the leader's
+      //    account was created after the import ran.
+      const email = (user.email || "").toLowerCase();
       const directPromise = getDocs(collectionGroup(db, "employees")).then(
         (snap) =>
           snap.docs
-            .map((d) => d.data() as Employee)
-            .filter((e) => e.evaluatorUid === user.uid),
+            .map((d) => d.data() as Employee & { evaluatorEmail?: string })
+            .filter(
+              (e) =>
+                (e.evaluatorUid && e.evaluatorUid === user.uid) ||
+                (!!email && (e.evaluatorEmail || "").toLowerCase() === email)
+            ) as Employee[],
         () => [] as Employee[]
       );
 
-      // 2. Department-level grants (assignments/{uid}, managed by admins).
-      const assignedPromise = getDoc(doc(db, "assignments", user.uid)).then(
-        (snap) => (snap.exists() ? ((snap.data().departmentIds ?? []) as string[]) : []),
-        () => [] as string[]
-      );
+      // 2. Departments this person leads: tagged in the directory by
+      //    email, plus any explicit admin grant by uid.
+      const assignedPromise = Promise.all([
+        getDoc(doc(db, "assignments", user.uid)).then(
+          (snap) => (snap.exists() ? ((snap.data().departmentIds ?? []) as string[]) : []),
+          () => [] as string[]
+        ),
+        email
+          ? getDoc(doc(db, "directory", email)).then(
+              (snap) =>
+                snap.exists() ? ((snap.data().departmentIds ?? []) as string[]) : [],
+              () => [] as string[]
+            )
+          : Promise.resolve([] as string[]),
+      ]).then(([a, b]) => [...new Set([...a, ...b])]);
 
       const [direct, assignedIds] = await Promise.all([directPromise, assignedPromise]);
 

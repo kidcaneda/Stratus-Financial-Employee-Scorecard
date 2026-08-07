@@ -35,8 +35,12 @@ export const ORG: Record<string, { leader: string | null; members: string[] }> =
     ],
   },
   Underwriting: {
-    leader: "charm@stratus.finance", // Team Leader - Underwriting
-    members: ["red@stratus.finance", "eliza@stratus.finance"],
+    leader: "ryan@stratus.finance", // Head - Loans Origination, also leads Underwriting
+    members: [
+      "charm@stratus.finance",
+      "red@stratus.finance",
+      "eliza@stratus.finance",
+    ],
   },
   Accounting: {
     leader: "ida@stratus.finance", // Accounting Manager
@@ -182,6 +186,11 @@ export async function importDirectory(
   );
 
   const mapped = new Set<string>();
+  // Leadership is recorded by EMAIL so it survives regardless of whether
+  // the leader has a Firebase Auth account yet. A leader can head more
+  // than one department, so their departments accumulate here and are
+  // written once at the end.
+  const leaderDepts = new Map<string, { name: string; departmentIds: string[] }>();
 
   for (const [deptName, { leader, members }] of Object.entries(ORG)) {
     const deptDoc = deptByNorm.get(norm(deptName));
@@ -200,11 +209,18 @@ export async function importDirectory(
     if (leader) {
       const dir = directory.get(leader);
       leaderName = dir?.name ?? leader;
+      // Record the leadership by email first — this is what scopes their
+      // view even before (or without) an auth account.
+      const acc = leaderDepts.get(leader) ?? { name: leaderName, departmentIds: [] };
+      acc.name = leaderName;
+      if (!acc.departmentIds.includes(deptDoc.id)) acc.departmentIds.push(deptDoc.id);
+      leaderDepts.set(leader, acc);
+
       const acct = await uidByEmail(leader);
       if (!acct) {
         log(
           "warn",
-          `Leader ${leaderName} <${leader}> has no Firebase Auth account — members get evaluatorName only. Create the account, then re-import to link.`
+          `Leader ${leaderName} <${leader}> has no Firebase Auth account yet — their departments are recorded by email and link automatically when they sign in.`
         );
       } else {
         leaderUid = acct.uid;
@@ -221,14 +237,6 @@ export async function importDirectory(
               { merge: true }
             );
           }
-        }
-        // Directory lookup doc — lets a lead self-provision to "supervisor"
-        // on first sign-in without waiting for an admin.
-        if (write) {
-          await adminDb().collection("directory").doc(leader).set(
-            { email: leader, role: "supervisor", departmentId: deptDoc.id, name: leaderName },
-            { merge: true }
-          );
         }
         const assignRef = adminDb().collection("assignments").doc(leaderUid);
         const existing = await assignRef.get();
@@ -273,6 +281,9 @@ export async function importDirectory(
         departmentId: deptDoc.id,
         role: dir.position,
         evaluatorName: leaderName || dept.evaluatorName || dept.managerName || "",
+        // Email is the durable evaluator link (uid only exists once the
+        // leader has an account); both are matched when scoping views.
+        ...(leader ? { evaluatorEmail: leader } : {}),
         ...(leaderUid ? { evaluatorUid: leaderUid } : {}),
         ...(linked ? { linkedUid: linked.uid } : {}),
       };
@@ -301,6 +312,24 @@ export async function importDirectory(
           { merge: true }
         );
       }
+    }
+  }
+
+  // Write each leader's directory record once, carrying every department
+  // they lead. This is the source of truth that scopes their views and
+  // that self-provisioning reads on first sign-in.
+  for (const [email, { name, departmentIds }] of leaderDepts) {
+    log(
+      "info",
+      `${name} leads ${departmentIds.length} department${
+        departmentIds.length === 1 ? "" : "s"
+      }: ${departmentIds.join(", ")}`
+    );
+    if (write) {
+      await adminDb()
+        .collection("directory")
+        .doc(email)
+        .set({ email, role: "supervisor", departmentIds, name }, { merge: true });
     }
   }
 
