@@ -72,11 +72,36 @@ export const ORG: Record<string, { leader: string | null; members: string[] }> =
     members: ["analyn@stratus.finance", "rheena@stratus.finance"],
   },
   Operations: {
-    leader: "carson@stratus.finance", // Chief of Staff
+    leader: "cheryl@stratus.finance", // HR & Operations Manager — leads Operations too
     members: [
+      "carson@stratus.finance",
       "coo_assistant@stratus.finance",
       "noel@stratus.finance",
       "kid@stratus.finance",
+    ],
+  },
+  // Carson Vasquez (Chief of Staff) leads these two. NOTE: neither exists
+  // as a scorecard department yet — the import reports them as unmatched
+  // and skips their members until the departments are created.
+  "Software Development": {
+    leader: "carson@stratus.finance",
+    members: [
+      "jed@stratus.finance",
+      "aurelio@stratus.finance",
+      "jen@stratus.finance",
+      "markanthony@stratus.finance",
+      "charleson@stratus.finance",
+      "mykle@stratus.finance",
+    ],
+  },
+  "Administrative Support": {
+    leader: "carson@stratus.finance",
+    members: [
+      "christel@stratus.finance",
+      "mark@stratus.finance",
+      "sid@stratus.finance",
+      "julie@stratus.finance",
+      "melveen@stratus.finance",
     ],
   },
   "SVC-Payments": {
@@ -197,7 +222,7 @@ export async function importDirectory(
     if (!deptDoc) {
       log(
         "warn",
-        `No scorecard department matches "${deptName}" — skipped (${members.length} people).`
+        `No scorecard department named "${deptName}" exists yet — its ${members.length} member(s) were skipped. Create the department (Excel Sync, or add it and define metrics), then re-import.`
       );
       continue;
     }
