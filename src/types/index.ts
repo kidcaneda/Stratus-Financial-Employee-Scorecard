@@ -88,6 +88,10 @@ export interface Employee {
   // view's "last scored / never scored" recency buckets.
   updatedAt?: number;
   updatedBy?: string;
+  // Set when someone leaves a department. The record and its evaluation
+  // history are kept for audit, but it drops out of rosters and scoring.
+  archived?: boolean;
+  archivedAt?: number;
 }
 
 // One measurable line item on a scorecard.

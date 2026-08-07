@@ -42,7 +42,9 @@ export function useAllEmployees() {
         ]);
         if (cancelled) return;
         if (empSnap.empty) return fallback();
-        setEmployees(empSnap.docs.map((d) => d.data() as Employee));
+        setEmployees(
+          empSnap.docs.map((d) => d.data() as Employee).filter((e) => !e.archived)
+        );
         setDepartments(deptSnap.docs.map((d) => d.data() as Department));
         setIsMock(false);
         setLoading(false);

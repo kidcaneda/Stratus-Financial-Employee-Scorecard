@@ -29,6 +29,28 @@ export async function saveEmployee(
   }
 }
 
+// ---- Remove someone from a department roster (keeps their history) ----
+export async function archiveEmployee(opts: {
+  departmentId: string;
+  employeeId: string;
+  archived?: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return { ok: false, error: "You're not signed in." };
+    const res = await fetch("/api/employees/archive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(opts),
+    });
+    const data = await res.json();
+    if (!res.ok) return { ok: false, error: data.error || "Failed." };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message || "Network error." };
+  }
+}
+
 // ---- Leader closes out an employee's challenge ----
 export async function resolveChallenge(opts: {
   departmentId: string;

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
+import { archiveEmployee } from "@/lib/employee-actions";
 import type { ImportEntry, ImportReport } from "@/lib/directory-import";
 
 // ============================================================
@@ -147,6 +148,8 @@ export default function DirectoryImportPage() {
             </ul>
           </div>
 
+          {report.extras.length > 0 && <ExtrasCard extras={report.extras} />}
+
           {report.unmapped.length > 0 && (
             <div className="card overflow-hidden">
               <div className="border-b border-hairline bg-panel-2 px-4 py-2 text-xs uppercase tracking-wide text-ink-muted">
@@ -167,6 +170,70 @@ export default function DirectoryImportPage() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// People sitting in a roster the mapping no longer places there — e.g.
+// someone who moved teams. Removing keeps their record and evaluation
+// history for audit; it just drops them from the roster and scoring.
+function ExtrasCard({ extras }: { extras: ImportReport["extras"] }) {
+  const [removed, setRemoved] = useState<Record<string, "busy" | "done" | string>>({});
+
+  const remove = async (e: ImportReport["extras"][number]) => {
+    const key = `${e.departmentId}/${e.employeeId}`;
+    setRemoved((p) => ({ ...p, [key]: "busy" }));
+    const res = await archiveEmployee({
+      departmentId: e.departmentId,
+      employeeId: e.employeeId,
+    });
+    setRemoved((p) => ({ ...p, [key]: res.ok ? "done" : res.error || "Failed" }));
+  };
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="border-b border-hairline bg-panel-2 px-4 py-2 text-xs uppercase tracking-wide text-ink-muted">
+        In a roster but not in the mapping ({extras.length})
+      </div>
+      <p className="px-4 pt-3 text-sm text-ink-muted">
+        These people are still on a department roster that the mapping no
+        longer places them in — usually someone who moved teams. Removing
+        keeps their record and evaluation history; it only takes them off the
+        roster.
+      </p>
+      <table className="w-full text-sm">
+        <tbody className="divide-y divide-hairline">
+          {extras.map((e) => {
+            const key = `${e.departmentId}/${e.employeeId}`;
+            const state = removed[key];
+            return (
+              <tr key={key}>
+                <td className="px-4 py-2 font-medium text-ink">{e.name}</td>
+                <td className="px-4 py-2 text-ink-muted">{e.departmentName}</td>
+                <td className="px-4 py-2 text-ink-muted">{e.email}</td>
+                <td className="px-4 py-2 text-right">
+                  {state === "done" ? (
+                    <span className="text-signal-green">Removed</span>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => remove(e)}
+                        disabled={state === "busy"}
+                        className="rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-signal-red transition-all hover:border-signal-red/40 hover:bg-signal-red/10"
+                      >
+                        {state === "busy" ? "Removing…" : "Remove from roster"}
+                      </button>
+                      {state && state !== "busy" && (
+                        <div className="text-xs text-signal-red">{state}</div>
+                      )}
+                    </>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -73,8 +73,9 @@ export const ORG: Record<string, { leader: string | null; members: string[] }> =
   },
   Operations: {
     leader: "cheryl@stratus.finance", // HR & Operations Manager — leads Operations too
+    // Carson is not listed here: he manages Software Development and
+    // Administrative Support, so he isn't one of Operations' reports.
     members: [
-      "carson@stratus.finance",
       "coo_assistant@stratus.finance",
       "noel@stratus.finance",
       "kid@stratus.finance",
@@ -138,6 +139,15 @@ export interface ImportReport {
   merged: number;
   entries: ImportEntry[];
   unmapped: { name: string; position: string; email: string }[];
+  // Records sitting in a department roster that the mapping no longer
+  // places there — e.g. someone who moved teams. Reported, never deleted.
+  extras: {
+    departmentId: string;
+    departmentName: string;
+    employeeId: string;
+    name: string;
+    email: string;
+  }[];
 }
 
 interface DirRow {
@@ -193,6 +203,7 @@ export async function importDirectory(
     merged: 0,
     entries: [],
     unmapped: [],
+    extras: [],
   };
   const log = (level: ImportEntry["level"], text: string) =>
     report.entries.push({ level, text });
@@ -240,6 +251,25 @@ export async function importDirectory(
       acc.name = leaderName;
       if (!acc.departmentIds.includes(deptDoc.id)) acc.departmentIds.push(deptDoc.id);
       leaderDepts.set(leader, acc);
+
+      // Keep the department's own metadata in step with the assignment —
+      // otherwise the department card keeps naming whoever the original
+      // workbook sync recorded as manager.
+      const staleManager =
+        (dept.managerName ?? "") !== leaderName ||
+        (dept.evaluatorName ?? "") !== leaderName;
+      if (staleManager) {
+        log(
+          "info",
+          `${dept.name}: manager ${dept.managerName || dept.evaluatorName || "(unset)"} → ${leaderName}`
+        );
+        if (write) {
+          await deptDoc.ref.set(
+            { managerName: leaderName, evaluatorName: leaderName },
+            { merge: true }
+          );
+        }
+      }
 
       const acct = await uidByEmail(leader);
       if (!acct) {
@@ -337,6 +367,25 @@ export async function importDirectory(
           { merge: true }
         );
       }
+    }
+
+    // Anyone already in this department's roster that the mapping no
+    // longer places here (e.g. moved teams). Reported so the roster can
+    // be reconciled deliberately — records are never deleted here,
+    // because they carry evaluation history.
+    const expected = new Set(members.map((m) => empId(m)));
+    const roster = await deptDoc.ref.collection("employees").get();
+    for (const d of roster.docs) {
+      const e = d.data();
+      if (e.archived) continue;
+      if (expected.has(d.id)) continue;
+      report.extras.push({
+        departmentId: deptDoc.id,
+        departmentName: dept.name,
+        employeeId: d.id,
+        name: (e.name as string) || d.id,
+        email: (e.email as string) || "",
+      });
     }
   }
 

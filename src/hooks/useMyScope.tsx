@@ -54,7 +54,10 @@ export function useMyScope() {
         try {
           const snap = await getDoc(doc(db, "directory", email));
           if (snap.exists()) {
-            for (const id of (snap.data().departmentIds ?? []) as string[]) ids.add(id);
+            const d = snap.data();
+            for (const id of (d.departmentIds ?? []) as string[]) ids.add(id);
+            // Records written before multi-department leads used a single id.
+            if (d.departmentId) ids.add(d.departmentId as string);
           }
         } catch {
           /* directory not readable — fall through to the other sources */

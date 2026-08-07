@@ -37,7 +37,9 @@ export function useEmployees(departmentId: string | undefined) {
         );
         if (cancelled) return;
         if (!snap.empty) {
-          setEmployees(snap.docs.map((d) => d.data() as Employee));
+          setEmployees(
+            snap.docs.map((d) => d.data() as Employee).filter((e) => !e.archived)
+          );
           setIsMock(false);
           setLoading(false);
         } else {

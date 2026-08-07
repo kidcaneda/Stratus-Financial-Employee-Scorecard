@@ -68,7 +68,8 @@ export function useMyTeam() {
       if (user.role === "admin") {
         const [emps, depts] = await Promise.all([
           getDocs(collectionGroup(db, "employees")).then(
-            (snap) => snap.docs.map((d) => d.data() as Employee),
+            (snap) =>
+              snap.docs.map((d) => d.data() as Employee).filter((e) => !e.archived),
             () => [] as Employee[]
           ),
           getDocs(collection(db, "departments")).then(
@@ -105,8 +106,9 @@ export function useMyTeam() {
             .map((d) => d.data() as Employee & { evaluatorEmail?: string })
             .filter(
               (e) =>
-                (e.evaluatorUid && e.evaluatorUid === user.uid) ||
-                (!!email && (e.evaluatorEmail || "").toLowerCase() === email)
+                !e.archived &&
+                ((e.evaluatorUid && e.evaluatorUid === user.uid) ||
+                  (!!email && (e.evaluatorEmail || "").toLowerCase() === email))
             ) as Employee[],
         () => [] as Employee[]
       );
@@ -120,8 +122,14 @@ export function useMyTeam() {
         ),
         email
           ? getDoc(doc(db, "directory", email)).then(
-              (snap) =>
-                snap.exists() ? ((snap.data().departmentIds ?? []) as string[]) : [],
+              (snap) => {
+                if (!snap.exists()) return [] as string[];
+                const d = snap.data();
+                const ids = [...((d.departmentIds ?? []) as string[])];
+                // Legacy single-department records.
+                if (d.departmentId) ids.push(d.departmentId as string);
+                return ids;
+              },
               () => [] as string[]
             )
           : Promise.resolve([] as string[]),
@@ -132,7 +140,8 @@ export function useMyTeam() {
       const assignedRosters = await Promise.all(
         assignedIds.map((id) =>
           getDocs(collection(db, "departments", id, "employees")).then(
-            (snap) => snap.docs.map((d) => d.data() as Employee),
+            (snap) =>
+              snap.docs.map((d) => d.data() as Employee).filter((e) => !e.archived),
             () => [] as Employee[]
           )
         )
