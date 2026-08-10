@@ -2,130 +2,28 @@ import * as XLSX from "xlsx";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 
 // ============================================================
-// Shared engine for importing the company employee-directory workbook
-// into Firestore. Used by the admin Directory Import page
-// (/api/import-directory) and by scripts/import-directory.ts.
+// Imports the company employee roster into Firestore. The workbook is
+// the single source of truth — there is no mapping in this file to keep
+// in sync. It reads, per row:
 //
-// For every department in the ORG mapping below it:
-//   1. Creates employee records under the matching scorecard department
-//      (existing records only merge identity/evaluator fields — recorded
-//      scores are never touched).
-//   2. Links members to their leader via evaluatorUid (drives My Team).
-//   3. Unions the department into the leader's assignments/{uid} grant.
-//   4. Upgrades a leader's missing/"employee" role claim to "supervisor"
-//      (admin/manager claims are never altered).
-//   5. Sets linkedUid on members whose email has an auth account.
+//   Name / Stratus Email Address / Position   → the person
+//   Department                                → which scorecard they're on
+//   Scorecard Evaluator                       → who scores them (by name)
+//   ROLE                                      → Admin | Manager | Supervisor | Employee
 //
-// Dry run (write=false) reports the full plan and changes nothing.
+// From that it derives everything: employee records, the reporting line
+// (evaluatorEmail/evaluatorUid), which departments each leader covers
+// (the departments of the people they evaluate), role claims, and the
+// department's own manager metadata.
+//
+// Used by the admin Directory Import page (/api/import-directory) and by
+// scripts/import-directory.ts. Dry run (write=false) changes nothing.
 // ============================================================
 
-// ORG MAPPING — edit to change who reports to whom. Keys are scorecard
-// department NAMES (matched case/punctuation-insensitively). `leader`
-// is the evaluator who scores that department's members (null = keep
-// the department's existing evaluator, no uid link).
-export const ORG: Record<string, { leader: string | null; members: string[] }> = {
-  "Loan Origination": {
-    leader: "ryan@stratus.finance", // Head - Loans Origination
-    members: [
-      "paula@stratus.finance",
-      "ellaine@stratus.finance",
-      "jass@stratus.finance",
-      "lois@stratus.finance",
-      "rofela@stratus.finance",
-    ],
-  },
-  Underwriting: {
-    leader: "ryan@stratus.finance", // Head - Loans Origination, also leads Underwriting
-    members: [
-      "charm@stratus.finance",
-      "red@stratus.finance",
-      "eliza@stratus.finance",
-    ],
-  },
-  Accounting: {
-    leader: "ida@stratus.finance", // Accounting Manager
-    members: [
-      "lea@stratus.finance",
-      "rose@stratus.finance",
-      "marygrace@stratus.finance",
-      "bobette@stratus.finance",
-      "chinny@stratus.finance",
-      "marie@stratus.finance",
-    ],
-  },
-  "Capital Markets": {
-    leader: "parker@stratus.finance", // Managing Director for Capital Markets
-    members: ["lisa@stratus.finance", "jairo@stratus.finance"],
-  },
-  "Human Resources": {
-    leader: "cheryl@stratus.finance", // HR & Operations Manager
-    members: [
-      "andrea@stratus.finance",
-      "jett@stratus.finance",
-      "gerald@stratus.finance",
-      "sam@stratus.finance",
-      "ian@stratus.finance",
-    ],
-  },
-  "Investor Relations": {
-    leader: "jannah@stratus.finance", // Investor Relations Lead
-    members: ["analyn@stratus.finance", "rheena@stratus.finance"],
-  },
-  Operations: {
-    leader: "cheryl@stratus.finance", // HR & Operations Manager — leads Operations too
-    // Carson is not listed here: he manages Software Development and
-    // Administrative Support, so he isn't one of Operations' reports.
-    members: [
-      "coo_assistant@stratus.finance",
-      "noel@stratus.finance",
-      "kid@stratus.finance",
-    ],
-  },
-  // Carson Vasquez (Chief of Staff) leads these two. NOTE: neither exists
-  // as a scorecard department yet — the import reports them as unmatched
-  // and skips their members until the departments are created.
-  "Software Development": {
-    leader: "carson@stratus.finance",
-    members: [
-      "jed@stratus.finance",
-      "aurelio@stratus.finance",
-      "jen@stratus.finance",
-      "markanthony@stratus.finance",
-      "charleson@stratus.finance",
-      "mykle@stratus.finance",
-    ],
-  },
-  "Administrative Support": {
-    leader: "carson@stratus.finance",
-    members: [
-      "christel@stratus.finance",
-      "mark@stratus.finance",
-      "sid@stratus.finance",
-      "julie@stratus.finance",
-      "melveen@stratus.finance",
-    ],
-  },
-  "SVC-Payments": {
-    leader: "lalaine@stratus.finance", // Payments Lead - Servicing
-    members: ["jhon@stratus.finance"],
-  },
-  "SVC-Collections": {
-    leader: "mario@stratus.finance", // Collections Lead - Servicing
-    members: ["miraluna@stratus.finance", "freya@stratus.finance"],
-  },
-  "SVC-Quality Control": {
-    leader: "edson@stratus.finance", // Quality Control Lead - Servicing
-    members: ["ira@stratus.finance"],
-  },
-  // Per-person sales scorecards: the person IS the department. No uid
-  // evaluator link — their existing evaluator (from the dept doc) stays.
-  "Sales-Camille": { leader: null, members: ["camille@stratus.finance"] },
-  "Sales-Gustavo": { leader: null, members: ["gustavo@stratus.finance"] },
-  "Sales-Phebe": { leader: null, members: ["phebe@stratus.finance"] },
-  "Sales-Trish": { leader: null, members: ["trisha@stratus.finance"] },
-  // Team-Level Executive KPI intentionally unmapped: executives
-  // (CEO/Co-CEO/Principals/CFO/GC/MDs/EAs) aren't imported as reports.
-};
+// Evaluator cells that mean "nobody scores this person here".
+const NO_EVALUATOR = new Set(["", "not applicable", "n/a", "na", "none"]);
+// An evaluator cell of ADMIN means "scored by an administrator".
+const ADMIN_EVALUATOR = "admin";
 
 export interface ImportEntry {
   level: "add" | "merge" | "warn" | "info";
@@ -139,8 +37,6 @@ export interface ImportReport {
   merged: number;
   entries: ImportEntry[];
   unmapped: { name: string; position: string; email: string }[];
-  // Records sitting in a department roster that the mapping no longer
-  // places there — e.g. someone who moved teams. Reported, never deleted.
   extras: {
     departmentId: string;
     departmentName: string;
@@ -150,36 +46,43 @@ export interface ImportReport {
   }[];
 }
 
-interface DirRow {
+interface RosterRow {
   name: string;
-  position: string;
   email: string;
+  position: string;
+  department: string;
+  evaluatorName: string;
+  role: string; // lowercased ROLE column
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+const norm = (s: string) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 const empId = (email: string) =>
   `emp_${email.split("@")[0].replace(/[^a-z0-9]+/gi, "-")}`;
 
-function readDirectory(buf: Buffer): Map<string, DirRow> {
+function readRoster(buf: Buffer): RosterRow[] {
   const wb = XLSX.read(buf, { type: "buffer" });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: null,
   });
-  const byEmail = new Map<string, DirRow>();
+  const out: RosterRow[] = [];
   for (const r of rows) {
     const email = String(r["Stratus Email Address"] ?? "").trim().toLowerCase();
     if (!email) continue;
-    byEmail.set(email, {
+    out.push({
       name: String(r["Name"] ?? "").trim(),
-      position: String(r["Position"] ?? "").trim(),
       email,
+      position: String(r["Position"] ?? "").trim(),
+      // "Department" is the current column; older files used "Dept".
+      department: String(r["Department"] ?? r["Dept"] ?? "").trim(),
+      evaluatorName: String(r["Scorecard Evaluator"] ?? "").trim(),
+      role: String(r["ROLE"] ?? "").trim().toLowerCase(),
     });
   }
-  return byEmail;
+  return out;
 }
 
-async function uidByEmail(
+async function authByEmail(
   email: string
 ): Promise<{ uid: string; claims: Record<string, unknown> } | null> {
   try {
@@ -195,10 +98,10 @@ export async function importDirectory(
   opts: { write: boolean }
 ): Promise<ImportReport> {
   const { write } = opts;
-  const directory = readDirectory(buf);
+  const roster = readRoster(buf);
   const report: ImportReport = {
     write,
-    peopleInFile: directory.size,
+    peopleInFile: roster.length,
     created: 0,
     merged: 0,
     entries: [],
@@ -208,180 +111,278 @@ export async function importDirectory(
   const log = (level: ImportEntry["level"], text: string) =>
     report.entries.push({ level, text });
 
-  if (directory.size === 0) {
-    log(
-      "warn",
-      'No rows with a "Stratus Email Address" column were found — is this the directory workbook?'
-    );
+  if (roster.length === 0) {
+    log("warn", 'No rows with a "Stratus Email Address" column were found — is this the roster workbook?');
     return report;
   }
+  if (!roster.some((r) => r.evaluatorName)) {
+    log(
+      "warn",
+      'No "Scorecard Evaluator" column found — add it to the roster so reporting lines can be imported.'
+    );
+  }
 
+  // Resolve an evaluator name to their roster row (and therefore email).
+  const byName = new Map(roster.map((r) => [norm(r.name), r]));
+  // Resolve a Department cell to a scorecard department document.
   const deptSnap = await adminDb().collection("departments").get();
-  const deptByNorm = new Map(
-    deptSnap.docs.map((d) => [norm(d.data().name ?? d.id), d])
-  );
+  const deptByNorm = new Map(deptSnap.docs.map((d) => [norm(d.data().name ?? d.id), d]));
 
-  const mapped = new Set<string>();
-  // Leadership is recorded by EMAIL so it survives regardless of whether
-  // the leader has a Firebase Auth account yet. A leader can head more
-  // than one department, so their departments accumulate here and are
-  // written once at the end.
-  const leaderDepts = new Map<string, { name: string; departmentIds: string[] }>();
+  const resolveDept = (row: RosterRow) => {
+    const direct = deptByNorm.get(norm(row.department));
+    if (direct) return direct;
+    // Per-person sales scorecards are named "Sales-<first name>", though
+    // the department may use a short form (Trisha → Sales-Trish).
+    if (norm(row.department) === "sales") {
+      const first = norm(row.name.split(/\s+/)[0] ?? "");
+      if (first) {
+        for (const [key, doc] of deptByNorm) {
+          if (!key.startsWith("sales")) continue;
+          const who = key.slice("sales".length);
+          if (who && (first.startsWith(who) || who.startsWith(first))) return doc;
+        }
+      }
+    }
+    return null;
+  };
 
-  for (const [deptName, { leader, members }] of Object.entries(ORG)) {
-    const deptDoc = deptByNorm.get(norm(deptName));
+  // ---- Pass 1: work out each person's placement ----
+  interface Placement {
+    row: RosterRow;
+    deptDoc: FirebaseFirestore.QueryDocumentSnapshot;
+    evaluatorEmail: string | null; // null = scored by an admin / nobody named
+    evaluatorName: string;
+  }
+  const placements: Placement[] = [];
+  const missingDepartments = new Map<string, number>();
+
+  for (const row of roster) {
+    const evalKey = row.evaluatorName.toLowerCase();
+    // Executives and other unscored people carry no evaluator.
+    if (NO_EVALUATOR.has(evalKey)) continue;
+
+    const deptDoc = resolveDept(row);
     if (!deptDoc) {
-      log(
-        "warn",
-        `No scorecard department named "${deptName}" exists yet — its ${members.length} member(s) were skipped. Create the department (Excel Sync, or add it and define metrics), then re-import.`
+      missingDepartments.set(
+        row.department || "(no department)",
+        (missingDepartments.get(row.department || "(no department)") ?? 0) + 1
       );
+      report.unmapped.push({ name: row.name, position: row.position, email: row.email });
       continue;
     }
-    const dept = deptDoc.data();
-    log("info", `■ ${dept.name}`);
 
-    let leaderUid: string | null = null;
-    let leaderName = "";
-    if (leader) {
-      const dir = directory.get(leader);
-      leaderName = dir?.name ?? leader;
-      // Record the leadership by email first — this is what scopes their
-      // view even before (or without) an auth account.
-      const acc = leaderDepts.get(leader) ?? { name: leaderName, departmentIds: [] };
-      acc.name = leaderName;
-      if (!acc.departmentIds.includes(deptDoc.id)) acc.departmentIds.push(deptDoc.id);
-      leaderDepts.set(leader, acc);
-
-      // Keep the department's own metadata in step with the assignment —
-      // otherwise the department card keeps naming whoever the original
-      // workbook sync recorded as manager.
-      const staleManager =
-        (dept.managerName ?? "") !== leaderName ||
-        (dept.evaluatorName ?? "") !== leaderName;
-      if (staleManager) {
+    let evaluatorEmail: string | null = null;
+    let evaluatorName = row.evaluatorName;
+    if (evalKey !== ADMIN_EVALUATOR) {
+      const match = byName.get(norm(row.evaluatorName));
+      if (match) {
+        evaluatorEmail = match.email;
+        evaluatorName = match.name;
+      } else {
         log(
-          "info",
-          `${dept.name}: manager ${dept.managerName || dept.evaluatorName || "(unset)"} → ${leaderName}`
+          "warn",
+          `${row.name}: evaluator "${row.evaluatorName}" isn't a name in this roster — the reporting link was skipped.`
         );
+      }
+    }
+
+    placements.push({ row, deptDoc, evaluatorEmail, evaluatorName });
+  }
+
+  for (const [dept, count] of missingDepartments) {
+    log(
+      "warn",
+      `No scorecard department named "${dept}" exists yet — its ${count} member(s) were skipped. Create the department, then re-import.`
+    );
+  }
+
+  // ---- Leaders: the departments of the people they evaluate ----
+  const leaders = new Map<string, { name: string; departmentIds: Set<string> }>();
+  for (const p of placements) {
+    if (!p.evaluatorEmail) continue;
+    const entry =
+      leaders.get(p.evaluatorEmail) ?? { name: p.evaluatorName, departmentIds: new Set<string>() };
+    entry.name = p.evaluatorName;
+    entry.departmentIds.add(p.deptDoc.id);
+    leaders.set(p.evaluatorEmail, entry);
+  }
+
+  // Resolve each leader's auth account once.
+  const leaderUids = new Map<string, string>();
+  for (const [email, info] of leaders) {
+    const acct = await authByEmail(email);
+    const rosterRow = byName.get(norm(info.name));
+    // Roles come from the ROLE column; "manager" and "supervisor" are the
+    // same privilege tier in the app. Admin is never granted automatically.
+    const wanted = rosterRow?.role === "manager" ? "manager" : "supervisor";
+
+    log(
+      "info",
+      `${info.name} evaluates people in ${info.departmentIds.size} department(s): ${[
+        ...info.departmentIds,
+      ].join(", ")}`
+    );
+
+    if (!acct) {
+      log(
+        "warn",
+        `${info.name} <${email}> has no Firebase Auth account yet — their departments are recorded by email and link automatically when they sign in.`
+      );
+    } else {
+      leaderUids.set(email, acct.uid);
+      const current = acct.claims.role as string | undefined;
+      if (current !== "admin" && current !== wanted) {
+        log("info", `${info.name}: role "${current ?? "none"}" → "${wanted}"`);
         if (write) {
-          await deptDoc.ref.set(
+          await adminAuth().setCustomUserClaims(acct.uid, { ...acct.claims, role: wanted });
+        }
+      }
+      if (write) {
+        await adminDb()
+          .collection("users")
+          .doc(acct.uid)
+          .set(
+            {
+              uid: acct.uid,
+              email,
+              displayName: info.name,
+              role: current === "admin" ? "admin" : wanted,
+            },
+            { merge: true }
+          );
+        await adminDb()
+          .collection("assignments")
+          .doc(acct.uid)
+          .set(
+            { uid: acct.uid, managerName: info.name, departmentIds: [...info.departmentIds] },
+            { merge: true }
+          );
+      }
+    }
+
+    if (write) {
+      await adminDb()
+        .collection("directory")
+        .doc(email)
+        .set(
+          {
+            email,
+            name: info.name,
+            role: wanted,
+            departmentIds: [...info.departmentIds],
+            departmentId: null, // clear the legacy single-department field
+          },
+          { merge: true }
+        );
+    }
+  }
+
+  // ---- Pass 2: write the employee records ----
+  const expectedByDept = new Map<string, Set<string>>();
+
+  for (const p of placements) {
+    const { row, deptDoc } = p;
+    const dept = deptDoc.data();
+    const id = empId(row.email);
+    expectedByDept.set(
+      deptDoc.id,
+      (expectedByDept.get(deptDoc.id) ?? new Set<string>()).add(id)
+    );
+
+    const ref = deptDoc.ref.collection("employees").doc(id);
+    const existing = await ref.get();
+    const linked = await authByEmail(row.email);
+    const evaluatorUid = p.evaluatorEmail ? leaderUids.get(p.evaluatorEmail) : undefined;
+
+    // Never clobber scores: new records get a zeroed metric template;
+    // existing records only merge identity + evaluator fields.
+    const base: Record<string, unknown> = {
+      id,
+      name: row.name,
+      email: row.email,
+      departmentId: deptDoc.id,
+      role: row.position,
+      evaluatorName: p.evaluatorName,
+      // Email is the durable evaluator link; uid only exists once the
+      // leader has an account. Both are matched when scoping views.
+      evaluatorEmail: p.evaluatorEmail ?? null,
+      ...(evaluatorUid ? { evaluatorUid } : {}),
+      ...(linked ? { linkedUid: linked.uid } : {}),
+      // Re-importing someone restores them to the roster.
+      archived: false,
+    };
+    if (!existing.exists) {
+      base.type = dept.type ?? "kpi";
+      base.metrics = (dept.metrics ?? []).map((m: Record<string, unknown>) => ({
+        ...m,
+        actual: { monthly: 0, quarterly: 0, yearly: 0 },
+        score: { monthly: 0, quarterly: 0, yearly: 0 },
+      }));
+      report.created++;
+    } else {
+      report.merged++;
+    }
+
+    log(
+      existing.exists ? "merge" : "add",
+      `${dept.name}: ${row.name} — ${row.position}` +
+        `${p.evaluatorEmail ? ` → evaluated by ${p.evaluatorName}` : " → evaluated by an admin"}` +
+        `${linked ? " (login linked)" : ""}`
+    );
+
+    if (write) {
+      await ref.set(base, { merge: true });
+      // Directory lookup for self-provisioning on first sign-in. Leaders
+      // get their own richer record written above; don't overwrite it.
+      if (!leaders.has(row.email)) {
+        await adminDb()
+          .collection("directory")
+          .doc(row.email)
+          .set(
+            {
+              email: row.email,
+              name: row.name,
+              role: row.role === "admin" ? "employee" : row.role || "employee",
+              departmentId: deptDoc.id,
+            },
+            { merge: true }
+          );
+      }
+    }
+  }
+
+  // ---- Department metadata + roster reconciliation ----
+  for (const doc of deptSnap.docs) {
+    const dept = doc.data();
+    const expected = expectedByDept.get(doc.id);
+
+    // The department's manager should be whoever evaluates its people.
+    const evaluators = new Set(
+      placements.filter((p) => p.deptDoc.id === doc.id).map((p) => p.evaluatorName)
+    );
+    if (evaluators.size === 1) {
+      const leaderName = [...evaluators][0];
+      if ((dept.managerName ?? "") !== leaderName || (dept.evaluatorName ?? "") !== leaderName) {
+        log("info", `${dept.name}: manager ${dept.managerName || "(unset)"} → ${leaderName}`);
+        if (write) {
+          await doc.ref.set(
             { managerName: leaderName, evaluatorName: leaderName },
             { merge: true }
           );
         }
       }
-
-      const acct = await uidByEmail(leader);
-      if (!acct) {
-        log(
-          "warn",
-          `Leader ${leaderName} <${leader}> has no Firebase Auth account yet — their departments are recorded by email and link automatically when they sign in.`
-        );
-      } else {
-        leaderUid = acct.uid;
-        const role = acct.claims.role as string | undefined;
-        if (!role || role === "employee") {
-          log("info", `Leader ${leaderName}: role claim "${role ?? "none"}" → "supervisor"`);
-          if (write) {
-            await adminAuth().setCustomUserClaims(leaderUid, {
-              ...acct.claims,
-              role: "supervisor",
-            });
-            await adminDb().collection("users").doc(leaderUid).set(
-              { uid: leaderUid, email: leader, displayName: leaderName, role: "supervisor" },
-              { merge: true }
-            );
-          }
-        }
-        const assignRef = adminDb().collection("assignments").doc(leaderUid);
-        const existing = await assignRef.get();
-        const have: string[] = existing.exists
-          ? existing.data()?.departmentIds ?? []
-          : [];
-        if (!have.includes(deptDoc.id)) {
-          log("info", `Assignment: ${leaderName} covers ${dept.name}`);
-          if (write) {
-            await assignRef.set(
-              {
-                uid: leaderUid,
-                managerName: leaderName,
-                departmentIds: [...have, deptDoc.id],
-              },
-              { merge: true }
-            );
-          }
-        }
-        mapped.add(leader);
-      }
     }
 
-    for (const email of members) {
-      const dir = directory.get(email);
-      if (!dir) {
-        log("warn", `${email} not found in the directory sheet — skipped.`);
-        continue;
-      }
-      mapped.add(email);
-      const id = empId(email);
-      const ref = deptDoc.ref.collection("employees").doc(id);
-      const existing = await ref.get();
-      const linked = await uidByEmail(email);
-
-      // Never clobber scores: new records get a zeroed metric template;
-      // existing records only merge identity + evaluator fields.
-      const base: Record<string, unknown> = {
-        id,
-        name: dir.name,
-        email,
-        departmentId: deptDoc.id,
-        role: dir.position,
-        evaluatorName: leaderName || dept.evaluatorName || dept.managerName || "",
-        // Email is the durable evaluator link (uid only exists once the
-        // leader has an account); both are matched when scoping views.
-        ...(leader ? { evaluatorEmail: leader } : {}),
-        ...(leaderUid ? { evaluatorUid: leaderUid } : {}),
-        ...(linked ? { linkedUid: linked.uid } : {}),
-      };
-      if (!existing.exists) {
-        base.type = dept.type ?? "kpi";
-        base.metrics = (dept.metrics ?? []).map((m: Record<string, unknown>) => ({
-          ...m,
-          actual: { monthly: 0, quarterly: 0, yearly: 0 },
-          score: { monthly: 0, quarterly: 0, yearly: 0 },
-        }));
-        report.created++;
-      } else {
-        report.merged++;
-      }
-      log(
-        existing.exists ? "merge" : "add",
-        `${dir.name} — ${dir.position}` +
-          `${leaderUid ? ` → reports to ${leaderName}` : ""}` +
-          `${linked ? " (login linked)" : ""}`
-      );
-      if (write) {
-        await ref.set(base, { merge: true });
-        // Directory lookup doc for self-provisioning as "employee".
-        await adminDb().collection("directory").doc(email).set(
-          { email, role: "employee", departmentId: deptDoc.id, name: dir.name },
-          { merge: true }
-        );
-      }
-    }
-
-    // Anyone already in this department's roster that the mapping no
-    // longer places here (e.g. moved teams). Reported so the roster can
-    // be reconciled deliberately — records are never deleted here,
-    // because they carry evaluation history.
-    const expected = new Set(members.map((m) => empId(m)));
-    const roster = await deptDoc.ref.collection("employees").get();
-    for (const d of roster.docs) {
+    // Anyone on the roster that the workbook no longer places here.
+    if (!expected) continue;
+    const current = await doc.ref.collection("employees").get();
+    for (const d of current.docs) {
       const e = d.data();
       if (e.archived) continue;
       if (expected.has(d.id)) continue;
       report.extras.push({
-        departmentId: deptDoc.id,
-        departmentName: dept.name,
+        departmentId: doc.id,
+        departmentName: dept.name ?? doc.id,
         employeeId: d.id,
         name: (e.name as string) || d.id,
         email: (e.email as string) || "",
@@ -389,24 +390,5 @@ export async function importDirectory(
     }
   }
 
-  // Write each leader's directory record once, carrying every department
-  // they lead. This is the source of truth that scopes their views and
-  // that self-provisioning reads on first sign-in.
-  for (const [email, { name, departmentIds }] of leaderDepts) {
-    log(
-      "info",
-      `${name} leads ${departmentIds.length} department${
-        departmentIds.length === 1 ? "" : "s"
-      }: ${departmentIds.join(", ")}`
-    );
-    if (write) {
-      await adminDb()
-        .collection("directory")
-        .doc(email)
-        .set({ email, role: "supervisor", departmentIds, name }, { merge: true });
-    }
-  }
-
-  report.unmapped = [...directory.values()].filter((r) => !mapped.has(r.email));
   return report;
 }

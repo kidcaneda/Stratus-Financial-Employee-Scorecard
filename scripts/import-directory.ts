@@ -1,8 +1,8 @@
 /**
  * Bulk-import the company employee directory workbook into Firestore
  * from the terminal. Same engine as the in-app admin page
- * (Sidebar → Directory Import); the ORG mapping lives in
- * src/lib/directory-import.ts.
+ * (Sidebar → Directory Import); the roster workbook itself is the
+ * source of truth for departments, evaluators and roles.
  *
  * Usage:
  *   npx tsx scripts/import-directory.ts <path-to-directory.xlsx>          (dry run)
