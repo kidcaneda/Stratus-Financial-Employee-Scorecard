@@ -318,6 +318,20 @@ export async function importDirectory(
         actual: { monthly: 0, quarterly: 0, yearly: 0 },
         score: { monthly: 0, quarterly: 0, yearly: 0 },
       }));
+      // Competency people start from the department's criteria, unrated —
+      // the template carries the sheet's sample scores, which aren't theirs.
+      if (dept.type === "competency" && dept.competency?.criteria) {
+        base.competency = {
+          criteria: dept.competency.criteria.map((c: Record<string, unknown>) => ({
+            ...c,
+            score: 0,
+            weighted: 0,
+            comments: "",
+          })),
+          overall: 0,
+          band: "",
+        };
+      }
       report.created++;
     } else {
       report.merged++;

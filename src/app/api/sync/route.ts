@@ -233,6 +233,16 @@ function parseCompetencySheet(
   };
 }
 
+// A sheet defines the scorecard TEMPLATE, not the org chart. Empty
+// manager/evaluator names are dropped so re-syncing can't blank the
+// leadership the roster import recorded.
+function templateFields(dept: Department): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...dept };
+  if (!out.managerName) delete out.managerName;
+  if (!out.evaluatorName) delete out.evaluatorName;
+  return out;
+}
+
 export async function POST(req: NextRequest) {
   const check = await requireAdmin(req);
   if (!check.ok) {
@@ -277,7 +287,7 @@ export async function POST(req: NextRequest) {
           const { dept, found } = parseCompetencySheet(sheetName, rows);
           if (found > 0) {
             const ref = adminDb().collection("departments").doc(dept.id);
-            batch.set(ref, dept);
+            batch.set(ref, templateFields(dept), { merge: true });
             log.push({ sheet: sheetName, metricsFound: found, status: "ok" });
             continue;
           }
@@ -303,7 +313,7 @@ export async function POST(req: NextRequest) {
       }
 
       const ref = adminDb().collection("departments").doc(dept.id);
-      batch.set(ref, dept);
+      batch.set(ref, templateFields(dept), { merge: true });
       log.push({ sheet: sheetName, metricsFound: found, status: "ok" });
     } catch (e: any) {
       log.push({
