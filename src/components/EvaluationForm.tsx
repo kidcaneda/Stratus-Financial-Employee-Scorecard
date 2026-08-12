@@ -448,14 +448,18 @@ function CompetencyEntry({
   onSaved: () => void;
   onCancel: () => void;
 }) {
+  const now = new Date();
   const template = dept.competency;
   const [name, setName] = useState(existing?.name ?? "");
   const [email, setEmail] = useState(existing?.email ?? "");
   const [role, setRole] = useState(existing?.role ?? "");
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [grow, setGrow] = useState(existing?.competency?.grow ?? emptyGrow());
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
   const [criteria, setCriteria] = useState<Criterion[]>(() => {
     const base = template?.criteria ?? existing?.competency?.criteria ?? [];
@@ -499,6 +503,24 @@ function CompetencyEntry({
       return setError("Rate every criterion (1–5) before saving.");
     setBusy(true);
 
+    const employeeId = existing?.id ?? newEmployeeId(name);
+    const monthKey = makeMonthKey(year, month);
+
+    // Like the KPI form: the record's card is the "current" snapshot shown
+    // on rosters, so only refresh it when this is the newest review on
+    // record — back-filling an earlier month must not regress it.
+    let refreshSnapshot = true;
+    if (existing && firebaseReady) {
+      try {
+        const monthsSnap = await getDocs(
+          collection(db, "departments", dept.id, "employees", existing.id, "months")
+        );
+        refreshSnapshot = !monthsSnap.docs.some((d) => d.id > monthKey);
+      } catch {
+        // If the check fails, keep the previous always-refresh behaviour.
+      }
+    }
+
     const card: CompetencyCard = {
       criteria: criteria.map((c) => ({ ...c, weighted: c.weight * c.score })),
       overall,
@@ -506,7 +528,7 @@ function CompetencyEntry({
       ...(hasGrow(grow) ? { grow: trimGrow(grow) } : {}),
     };
     const employee: Employee = {
-      id: existing?.id ?? newEmployeeId(name),
+      id: employeeId,
       name: name.trim(),
       email: email.trim(),
       departmentId: dept.id,
@@ -515,12 +537,43 @@ function CompetencyEntry({
       evaluatorUid: existing?.evaluatorUid,
       type: "competency",
       metrics: existing?.metrics ?? [],
-      competency: card,
+      ...(refreshSnapshot ? { competency: card } : {}),
       linkedUid: existing?.linkedUid,
     };
     const res = await saveEmployee(employee);
+    if (!res.ok) {
+      setBusy(false);
+      return setError(res.error ?? "Failed to save review.");
+    }
+
+    // Record the dated review so competency people get the same history,
+    // trend, rollups and acknowledge/challenge flow as KPI people. Each
+    // criterion is stored as an entry rated out of 5, converted to the
+    // 0–100 scale the month rollups use.
+    const entries: MonthlyMetricEntry[] = criteria.map((c) => ({
+      metricId: c.id,
+      metricName: c.name,
+      target: 5,
+      unit: "1-5",
+      weight: c.weight,
+      actual: c.score,
+      score: (c.score / 5) * 100,
+    }));
+    const evaluation: MonthlyEvaluation = {
+      monthKey,
+      employeeId,
+      departmentId: dept.id,
+      entries,
+      recordedBy: "",
+      recordedByName: "",
+      recordedAt: Date.now(),
+      ...(hasGrow(grow) ? { grow: trimGrow(grow) } : {}),
+    };
+    const evalResult = await saveMonthlyEvaluation(evaluation);
     setBusy(false);
-    if (!res.ok) return setError(res.error ?? "Failed to save review.");
+    if (!evalResult.ok)
+      return setError(evalResult.error ?? "Failed to save the dated review.");
+
     setSaved(true);
     setTimeout(onSaved, 750);
   };
@@ -553,7 +606,11 @@ function CompetencyEntry({
       footer={
         <>
           <button onClick={handleSave} disabled={busy || saved} className="btn-primary">
-            {saved ? "Saved ✓" : busy ? "Saving…" : "Save review"}
+            {saved
+              ? "Saved ✓"
+              : busy
+              ? "Saving…"
+              : `Save ${MONTH_NAMES[month - 1]} ${year} review`}
           </button>
           <button onClick={onCancel} className="btn-ghost">
             Cancel
@@ -576,6 +633,29 @@ function CompetencyEntry({
         setRole={setRole}
         locked={!!existing}
       />
+
+      {/* Review period — each month is recorded separately, so a
+          competency review builds the same history as a KPI scorecard. */}
+      <div className="flex flex-wrap items-end gap-3">
+        <Select label="Month" value={month} onChange={setMonth}>
+          {MONTH_NAMES.map((mn, i) => (
+            <option key={mn} value={i + 1}>
+              {mn}
+            </option>
+          ))}
+        </Select>
+        <Select label="Year" value={year} onChange={setYear}>
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </Select>
+        <p className="pb-2 text-xs text-ink-muted">
+          Ratings are recorded against this period; quarterly &amp; yearly roll
+          up from the months you record.
+        </p>
+      </div>
 
       <div className="stagger space-y-4">
         {sections.map((sec) => (
