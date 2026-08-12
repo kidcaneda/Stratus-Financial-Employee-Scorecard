@@ -15,7 +15,11 @@ import {
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db, firebaseReady } from "@/lib/firebase";
+import { provisionMe } from "@/lib/employee-actions";
 import { AppUser, Role } from "@/types";
+
+// Accounts whose role claim we've already tried to re-sync this session.
+const syncedUids = new Set<string>();
 
 interface AuthState {
   user: AppUser | null;
@@ -63,11 +67,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // Falls back to employee on read failure — least privilege.
       }
+
+      // Reconcile the ID token's role claim with the server-side profile.
+      // A directory import changes roles server-side, but a signed-in
+      // token keeps its old claim until refreshed — which would show
+      // controls the server then rejects (and hide ones it would allow).
+      // Write authorization uses the claim, so the claim wins here.
+      let effectiveRole = role;
+      try {
+        const claimRole = (await fbUser.getIdTokenResult()).claims.role as
+          | Role
+          | undefined;
+        if (claimRole && claimRole === role) {
+          effectiveRole = claimRole;
+        } else if (!syncedUids.has(fbUser.uid)) {
+          // Only try once per session so a genuinely unprovisioned
+          // account doesn't re-request on every page load.
+          syncedUids.add(fbUser.uid);
+          await provisionMe().catch(() => undefined);
+          const fresh = await fbUser.getIdTokenResult(true);
+          effectiveRole = (fresh.claims.role as Role | undefined) ?? role;
+          document.cookie = `__session=${fresh.token}; path=/; max-age=3600; samesite=lax`;
+        } else if (claimRole) {
+          effectiveRole = claimRole;
+        }
+      } catch {
+        // Keep the profile role if the token can't be inspected.
+      }
+
       setUser({
         uid: fbUser.uid,
         email: fbUser.email ?? "",
         displayName,
-        role,
+        role: effectiveRole,
         departmentId,
       });
       setLoading(false);

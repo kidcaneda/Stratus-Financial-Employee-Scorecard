@@ -147,9 +147,15 @@ export function useMyTeam() {
         )
       );
 
-      // Merge the two paths; an employee can match both.
+      // Merge the two paths; an employee can match both. A lead's own
+      // record is excluded — being assigned a department shouldn't put
+      // you in your own team list.
       const byKey = new Map<string, Employee>();
       for (const e of [...direct, ...assignedRosters.flat()]) {
+        const isSelf =
+          (e.linkedUid && e.linkedUid === user.uid) ||
+          (!!email && (e.email || "").toLowerCase() === email);
+        if (isSelf) continue;
         byKey.set(`${e.departmentId}/${e.id}`, e);
       }
       const all = [...byKey.values()];
