@@ -14,16 +14,29 @@ import { MonthlyTrend } from "@/components/MonthlyTrend";
 import { AnalyticsPanel } from "@/components/AnalyticsPanel";
 import { GrowDisplay, GrowHistory, hasGrow } from "@/components/GrowNotes";
 import { EmployeeResponses } from "@/components/EmployeeResponses";
+import { PriorAssignments } from "@/components/PriorAssignments";
+import { usePersonHistory } from "@/hooks/usePersonHistory";
 import { useAuth } from "@/hooks/useAuth";
 import { isDeptLead } from "@/types";
 
 export default function EmployeeDetailPage() {
   const { id, empId } = useParams<{ id: string; empId: string }>();
   const { departments } = useDepartments();
-  const { employees, isMock, loading } = useEmployees(id);
+  const { employees, isMock, loading } = useEmployees(id, { includeArchived: true });
   const { months } = useMonthlyEvaluations(id, empId);
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("monthly");
+
+  // Follow the person across departments so a transfer never hides their
+  // earlier evaluations. Runs before any early return (rules of hooks);
+  // it simply yields nothing until the record has loaded.
+  const record = employees.find((e) => e.id === empId);
+  const { assignments: priorAssignments } = usePersonHistory({
+    email: record?.email,
+    linkedUid: record?.linkedUid,
+    excludeDepartmentId: id,
+    excludeEmployeeId: empId,
+  });
 
   if (loading) return <div className="text-sm text-ink-muted">Loading…</div>;
 
@@ -65,7 +78,14 @@ export default function EmployeeDetailPage() {
           >
             ← {dept?.name ?? "Department"}
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold text-ink">{emp.name}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold text-ink">{emp.name}</h1>
+            {emp.archived && (
+              <span className="pill bg-panel-2 text-ink-muted">
+                Previous assignment
+              </span>
+            )}
+          </div>
           <p className="text-sm text-ink-muted">
             {emp.role} · Evaluator: {emp.evaluatorName}
           </p>
@@ -87,6 +107,9 @@ export default function EmployeeDetailPage() {
         canResolve={canResolve}
         onResolved={() => window.location.reload()}
       />
+
+      {/* Evaluations this person has from other departments. */}
+      <PriorAssignments assignments={priorAssignments} />
 
       {/* Evaluator's GROW commentary — pick a month, quarter, or all. */}
       {growMonths.length > 0 && <GrowHistory growMonths={growMonths} />}

@@ -131,8 +131,13 @@ function ScorecardBlock({
 
   return (
     <div className="space-y-6">
-      {showHeading && (
-        <h2 className="text-base font-semibold text-ink">{deptName}</h2>
+      {(showHeading || emp.archived) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold text-ink">{deptName}</h2>
+          {emp.archived && (
+            <span className="pill bg-panel-2 text-ink-muted">Previous department</span>
+          )}
+        </div>
       )}
 
       {/* Overall + period rollups */}
