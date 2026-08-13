@@ -6,6 +6,12 @@ import { useAllEmployees } from "@/hooks/useAllEmployees";
 import { useAllMonths } from "@/hooks/useAllMonths";
 import { useMyScope } from "@/hooks/useMyScope";
 import { buildReport, STATUS_LABEL, score1 } from "@/lib/report-data";
+import {
+  buildCompliance,
+  monthOptions,
+  monthKeyLabel,
+} from "@/lib/compliance-data";
+import { useAuditTrail } from "@/hooks/useAuditTrail";
 import { exportExcel, exportPowerPoint, exportWord } from "@/lib/report-export";
 import { Period, isDeptLead } from "@/types";
 import { PeriodSelector, StatusPill } from "@/components/ui";
@@ -25,7 +31,12 @@ export default function ReportsPage() {
   const { employees, departments, loading } = useAllEmployees();
   const { months, loading: monthsLoading } = useAllMonths();
   const { departmentIds, loading: scopeLoading } = useMyScope();
+  const { entries: auditEntries, permitted: auditPermitted } = useAuditTrail();
   const [period, setPeriod] = useState<Period>("monthly");
+  const [complianceMonth, setComplianceMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -57,6 +68,26 @@ export default function ReportsPage() {
       }),
     [scoped, months, period, departmentIds]
   );
+
+  const compliance = useMemo(
+    () =>
+      buildCompliance({
+        departments: scoped.departments,
+        employees: scoped.employees,
+        months,
+        audit: auditEntries,
+        monthKey: complianceMonth,
+        scopeLabel:
+          departmentIds === null
+            ? "All departments"
+            : `${scoped.departments.length} department${
+                scoped.departments.length === 1 ? "" : "s"
+              }`,
+      }),
+    [scoped, months, auditEntries, complianceMonth, departmentIds]
+  );
+
+  const months12 = useMemo(() => monthOptions(months), [months]);
 
   if (!canView && user) {
     return (
@@ -98,21 +129,21 @@ export default function ReportsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <PeriodSelector value={period} onChange={setPeriod} />
           <button
-            onClick={() => run("Excel", () => exportExcel(report))}
+            onClick={() => run("Excel", () => exportExcel(report, compliance))}
             disabled={!!busy}
             className="btn-ghost"
           >
             {busy === "Excel" ? "Building…" : "Excel"}
           </button>
           <button
-            onClick={() => run("PowerPoint", () => exportPowerPoint(report))}
+            onClick={() => run("PowerPoint", () => exportPowerPoint(report, compliance))}
             disabled={!!busy}
             className="btn-ghost"
           >
             {busy === "PowerPoint" ? "Building…" : "PowerPoint"}
           </button>
           <button
-            onClick={() => run("Word", () => exportWord(report))}
+            onClick={() => run("Word", () => exportWord(report, compliance))}
             disabled={!!busy}
             className="btn-ghost"
           >
@@ -218,6 +249,145 @@ export default function ReportsPage() {
             <PeopleTable people={report.needsAttention} />
           </Section>
         </div>
+
+        {/* ---- Monthly compliance (audit) ---- */}
+        <div className="card break-inside-avoid overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-panel-2 px-4 py-2.5">
+            <div>
+              <h2 className="text-sm font-semibold text-ink">
+                Compliance — {compliance.monthLabel}
+              </h2>
+              <p className="text-xs text-ink-muted">
+                Were all required evaluations recorded, on time, and
+                acknowledged? On-time cut-off: {compliance.onTimeCutoff}.
+              </p>
+            </div>
+            <select
+              value={complianceMonth}
+              onChange={(e) => setComplianceMonth(e.target.value)}
+              className="no-print rounded-lg border border-hairline bg-panel px-3 py-1.5 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+            >
+              {months12.map((k) => (
+                <option key={k} value={k}>
+                  {monthKeyLabel(k)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
+            <Stat
+              label="Completion"
+              value={Math.round(compliance.totals.completionPct)}
+              tone={
+                compliance.totals.missing === 0
+                  ? "text-signal-green"
+                  : "text-signal-amber"
+              }
+            />
+            <Stat
+              label="Recorded"
+              value={compliance.totals.recorded}
+              tone="text-signal-green"
+            />
+            <Stat label="Missing" value={compliance.totals.missing} tone="text-signal-red" />
+            <Stat label="On time" value={compliance.totals.onTime} tone="text-signal-green" />
+            <Stat label="Late" value={compliance.totals.late} tone="text-signal-amber" />
+            <Stat
+              label="Open challenges"
+              value={compliance.totals.challengesOpen}
+              tone="text-signal-red"
+            />
+          </div>
+          <p className="border-t border-hairline px-4 py-2 text-xs text-ink-muted">
+            Employee response rate {score1(compliance.totals.acknowledgementPct)}% ·{" "}
+            {compliance.totals.acknowledged} accepted ·{" "}
+            {compliance.totals.challenged} challenged ·{" "}
+            {compliance.totals.pending} awaiting response
+          </p>
+
+          {/* Completion by evaluator — accountability */}
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-y border-hairline bg-panel-2 text-left text-xs uppercase tracking-wide text-ink-muted">
+                <th className="px-4 py-2 font-medium">Evaluator</th>
+                <th className="px-4 py-2 text-right font-medium">Recorded</th>
+                <th className="px-4 py-2 text-right font-medium">Completion</th>
+                <th className="px-4 py-2 font-medium">Still owed</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-hairline">
+              {compliance.byEvaluator.map((g) => (
+                <tr key={g.key}>
+                  <td className="px-4 py-2 font-medium text-ink">{g.name}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted">
+                    {g.recorded}/{g.expected}
+                  </td>
+                  <td
+                    className={`px-4 py-2 text-right tabular-nums font-medium ${
+                      g.completionPct >= 100
+                        ? "text-signal-green"
+                        : g.completionPct >= 50
+                        ? "text-signal-amber"
+                        : "text-signal-red"
+                    }`}
+                  >
+                    {score1(g.completionPct)}%
+                  </td>
+                  <td className="px-4 py-2 text-ink-muted">
+                    {g.missing.length ? g.missing.join(", ") : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Exceptions an auditor follows up on */}
+        {compliance.exceptions.length > 0 && (
+          <Section
+            title="Exceptions to follow up"
+            subtitle={`${compliance.exceptions.length} item(s) for ${compliance.monthLabel}`}
+          >
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-hairline">
+                {compliance.exceptions.map((e) => (
+                  <tr key={`${e.departmentId}/${e.email}`}>
+                    <td className="px-4 py-2 font-medium text-ink">{e.name}</td>
+                    <td className="px-4 py-2 text-ink-muted">{e.departmentName}</td>
+                    <td className="px-4 py-2 text-signal-amber">
+                      {e.challengeOpen
+                        ? "Challenge unresolved"
+                        : e.onTime === false
+                        ? `Recorded ${e.daysLate} day(s) late`
+                        : "Awaiting employee response"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Section>
+        )}
+
+        {/* Audit trail (admins only — Firestore restricts the read) */}
+        {auditPermitted && compliance.auditTrail.length > 0 && (
+          <Section
+            title="Audit trail"
+            subtitle={`Activity recorded around ${compliance.monthLabel}`}
+          >
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-hairline">
+                {compliance.auditTrail.slice(0, 40).map((a, i) => (
+                  <tr key={i}>
+                    <td className="whitespace-nowrap px-4 py-2 text-ink-muted">{a.when}</td>
+                    <td className="px-4 py-2 text-ink">{a.actor}</td>
+                    <td className="px-4 py-2 text-ink-muted">{a.summary}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Section>
+        )}
 
         {/* Per-department detail */}
         {report.departments

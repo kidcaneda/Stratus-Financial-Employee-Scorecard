@@ -1,6 +1,7 @@
 "use client";
 
 import { ReportModel, STATUS_LABEL, STATUS_HEX, score1 } from "@/lib/report-data";
+import { ComplianceModel } from "@/lib/compliance-data";
 
 // ============================================================
 // Renders the report model to Excel, PowerPoint and Word. Each library
@@ -27,7 +28,7 @@ const stamp = (r: ReportModel) =>
 // Excel — a workbook an analyst can pivot: summary, departments,
 // every employee, and the organisation trend.
 // ---------------------------------------------------------------
-export async function exportExcel(r: ReportModel) {
+export async function exportExcel(r: ReportModel, c?: ComplianceModel) {
   const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
 
@@ -109,6 +110,82 @@ export async function exportExcel(r: ReportModel) {
     );
   }
 
+  if (c) {
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        [`Compliance — ${c.monthLabel}`],
+        ["Scope", c.scopeLabel],
+        ["On-time cut-off", c.onTimeCutoff],
+        [],
+        ["Employees in scope", c.totals.expected],
+        ["Evaluations recorded", c.totals.recorded],
+        ["Missing", c.totals.missing],
+        ["Completion %", Number(c.totals.completionPct.toFixed(1))],
+        [],
+        ["Recorded on time", c.totals.onTime],
+        ["Recorded late", c.totals.late],
+        [],
+        ["Acknowledged by employee", c.totals.acknowledged],
+        ["Awaiting employee response", c.totals.pending],
+        ["Challenged", c.totals.challenged],
+        ["Challenges open", c.totals.challengesOpen],
+        ["Challenges resolved", c.totals.challengesResolved],
+        ["Employee response rate %", Number(c.totals.acknowledgementPct.toFixed(1))],
+      ]),
+      "Compliance"
+    );
+
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ["Evaluator", "Expected", "Recorded", "Completion %", "Missing"],
+        ...c.byEvaluator.map((g) => [
+          g.name,
+          g.expected,
+          g.recorded,
+          Number(g.completionPct.toFixed(1)),
+          g.missing.join("; "),
+        ]),
+      ]),
+      "Completion by evaluator"
+    );
+
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        [
+          "Employee", "Department", "Evaluator", "Recorded", "Recorded on",
+          "On time", "Days late", "Employee response", "Challenge open", "Score",
+        ],
+        ...c.rows.map((row) => [
+          row.name,
+          row.departmentName,
+          row.evaluatorName,
+          row.recorded ? "Yes" : "No",
+          row.recordedOn,
+          row.onTime === null ? "" : row.onTime ? "Yes" : "No",
+          row.daysLate || "",
+          row.ack,
+          row.challengeOpen ? "Yes" : "",
+          row.score === null ? "" : Number(row.score.toFixed(1)),
+        ]),
+      ]),
+      "Compliance detail"
+    );
+
+    if (c.auditTrail.length) {
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.aoa_to_sheet([
+          ["When", "Actor", "Action", "Summary"],
+          ...c.auditTrail.map((a) => [a.when, a.actor, a.action, a.summary]),
+        ]),
+        "Audit trail"
+      );
+    }
+  }
+
   const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   download(
     new Blob([out], {
@@ -123,7 +200,7 @@ export async function exportExcel(r: ReportModel) {
 // ranking, trend, top performers, needs attention, and a slide per
 // department.
 // ---------------------------------------------------------------
-export async function exportPowerPoint(r: ReportModel) {
+export async function exportPowerPoint(r: ReportModel, c?: ComplianceModel) {
   const PptxGenJS = (await import("pptxgenjs")).default;
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_16x9";
@@ -296,13 +373,101 @@ export async function exportPowerPoint(r: ReportModel) {
     });
   }
 
+  // Compliance slides for the monthly audit.
+  if (c) {
+    const sc = pptx.addSlide();
+    titleBar(sc, `Compliance — ${c.monthLabel}`);
+    const ctiles: [string, string, string][] = [
+      ["Completion", `${score1(c.totals.completionPct)}%`, c.totals.missing ? STATUS_HEX.amber : STATUS_HEX.green],
+      ["Recorded", `${c.totals.recorded}/${c.totals.expected}`, ACCENT],
+      ["On time", String(c.totals.onTime), c.totals.late ? STATUS_HEX.amber : STATUS_HEX.green],
+      ["Open challenges", String(c.totals.challengesOpen), c.totals.challengesOpen ? STATUS_HEX.red : STATUS_HEX.green],
+    ];
+    ctiles.forEach(([label, value, color], i) => {
+      const x = 0.5 + i * 2.3;
+      sc.addShape(pptx.ShapeType.roundRect, {
+        x, y: 1.3, w: 2.1, h: 1.5, fill: { color: "F1F5F9" }, line: { color: "E2E8F0" },
+      });
+      sc.addText(label, { x, y: 1.45, w: 2.1, h: 0.3, fontSize: 11, color: MUTED, align: "center" });
+      sc.addText(value, { x, y: 1.8, w: 2.1, h: 0.7, fontSize: 30, bold: true, color, align: "center" });
+    });
+    sc.addText(
+      `Employee response rate ${score1(c.totals.acknowledgementPct)}% · ` +
+        `${c.totals.acknowledged} accepted · ${c.totals.challenged} challenged · ` +
+        `${c.totals.pending} awaiting response`,
+      { x: 0.5, y: 3.0, w: 9, h: 0.4, fontSize: 12, color: MUTED }
+    );
+    sc.addText(`On-time cut-off: ${c.onTimeCutoff}`, {
+      x: 0.5, y: 3.4, w: 9, h: 0.3, fontSize: 11, color: MUTED, italic: true,
+    });
+
+    // Completion by evaluator — accountability at a glance.
+    if (c.byEvaluator.length) {
+      const se = pptx.addSlide();
+      titleBar(se, "Completion by evaluator");
+      const rows = [
+        [
+          { text: "Evaluator", options: { bold: true, color: "FFFFFF", fill: { color: INK } } },
+          { text: "Recorded", options: { bold: true, color: "FFFFFF", fill: { color: INK }, align: "right" } },
+          { text: "Completion", options: { bold: true, color: "FFFFFF", fill: { color: INK }, align: "right" } },
+          { text: "Missing", options: { bold: true, color: "FFFFFF", fill: { color: INK } } },
+        ],
+        ...c.byEvaluator.slice(0, 14).map((g) => [
+          { text: g.name, options: {} },
+          { text: `${g.recorded}/${g.expected}`, options: { align: "right" } },
+          {
+            text: `${score1(g.completionPct)}%`,
+            options: {
+              align: "right", bold: true,
+              color: g.completionPct >= 100 ? STATUS_HEX.green : g.completionPct >= 50 ? STATUS_HEX.amber : STATUS_HEX.red,
+            },
+          },
+          { text: g.missing.slice(0, 4).join(", ") + (g.missing.length > 4 ? ` +${g.missing.length - 4}` : ""), options: { color: MUTED } },
+        ]),
+      ];
+      se.addTable(rows as any, {
+        x: 0.5, y: 1.15, w: 9, colW: [2.4, 1.2, 1.3, 4.1],
+        fontSize: 11, border: { type: "solid", color: "E2E8F0", pt: 1 }, rowH: 0.3,
+      });
+    }
+
+    // Exceptions — what an auditor follows up on.
+    if (c.exceptions.length) {
+      const sx = pptx.addSlide();
+      titleBar(sx, "Exceptions to follow up");
+      const rows = [
+        [
+          { text: "Employee", options: { bold: true, color: "FFFFFF", fill: { color: INK } } },
+          { text: "Department", options: { bold: true, color: "FFFFFF", fill: { color: INK } } },
+          { text: "Issue", options: { bold: true, color: "FFFFFF", fill: { color: INK } } },
+        ],
+        ...c.exceptions.slice(0, 14).map((e) => [
+          { text: e.name, options: {} },
+          { text: e.departmentName, options: { color: MUTED } },
+          {
+            text: e.challengeOpen
+              ? "Challenge unresolved"
+              : e.onTime === false
+              ? `Recorded ${e.daysLate} day(s) late`
+              : "Awaiting employee response",
+            options: { color: STATUS_HEX.amber },
+          },
+        ]),
+      ];
+      sx.addTable(rows as any, {
+        x: 0.5, y: 1.15, w: 9, colW: [3.0, 3.0, 3.0],
+        fontSize: 11, border: { type: "solid", color: "E2E8F0", pt: 1 }, rowH: 0.3,
+      });
+    }
+  }
+
   await pptx.writeFile({ fileName: `${stamp(r)}.pptx` });
 }
 
 // ---------------------------------------------------------------
 // Word — the written report: summary, department tables, appendices.
 // ---------------------------------------------------------------
-export async function exportWord(r: ReportModel) {
+export async function exportWord(r: ReportModel, c?: ComplianceModel) {
   const {
     Document, Packer, Paragraph, HeadingLevel, TextRun,
     Table, TableRow, TableCell, WidthType, AlignmentType,
@@ -435,6 +600,75 @@ export async function exportWord(r: ReportModel) {
       ),
       new Paragraph({ text: "" })
     );
+  }
+
+  if (c) {
+    children.push(
+      new Paragraph({
+        text: `Compliance report — ${c.monthLabel}`,
+        heading: HeadingLevel.HEADING_2,
+      }),
+      new Paragraph(
+        `${c.totals.recorded} of ${c.totals.expected} required evaluations were recorded ` +
+          `(${score1(c.totals.completionPct)}% complete), of which ${c.totals.onTime} were ` +
+          `on time and ${c.totals.late} late against a cut-off of ${c.onTimeCutoff}. ` +
+          `${c.totals.acknowledged} were accepted by the employee, ${c.totals.challenged} challenged ` +
+          `(${c.totals.challengesOpen} still open) and ${c.totals.pending} await a response.`
+      ),
+      new Paragraph({ text: "" }),
+      new Paragraph({ text: "Completion by evaluator", heading: HeadingLevel.HEADING_3 }),
+      table(
+        ["Evaluator", "Recorded", "Completion", "Missing"],
+        c.byEvaluator.map((g) => [
+          g.name,
+          `${g.recorded}/${g.expected}`,
+          `${score1(g.completionPct)}%`,
+          g.missing.join(", ") || "—",
+        ]),
+        1
+      ),
+      new Paragraph({ text: "" })
+    );
+
+    if (c.missingRows.length) {
+      children.push(
+        new Paragraph({ text: "Missing evaluations", heading: HeadingLevel.HEADING_3 }),
+        table(
+          ["Employee", "Department", "Evaluator"],
+          c.missingRows.map((e) => [e.name, e.departmentName, e.evaluatorName])
+        ),
+        new Paragraph({ text: "" })
+      );
+    }
+
+    if (c.exceptions.length) {
+      children.push(
+        new Paragraph({ text: "Exceptions", heading: HeadingLevel.HEADING_3 }),
+        table(
+          ["Employee", "Department", "Issue"],
+          c.exceptions.map((e) => [
+            e.name,
+            e.departmentName,
+            e.challengeOpen
+              ? "Challenge unresolved"
+              : e.onTime === false
+              ? `Recorded ${e.daysLate} day(s) late`
+              : "Awaiting employee response",
+          ])
+        ),
+        new Paragraph({ text: "" })
+      );
+    }
+
+    if (c.auditTrail.length) {
+      children.push(
+        new Paragraph({ text: "Audit trail", heading: HeadingLevel.HEADING_3 }),
+        table(
+          ["When", "Actor", "Activity"],
+          c.auditTrail.slice(0, 100).map((a) => [a.when, a.actor, a.summary])
+        )
+      );
+    }
   }
 
   const doc = new Document({ sections: [{ children }] });
