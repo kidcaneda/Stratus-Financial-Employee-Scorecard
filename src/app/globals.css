@@ -74,3 +74,72 @@ input, select, textarea {
     transition: none !important;
   }
 }
+
+/* ============================================================
+   Print / PDF — the Reports page doubles as the printed report.
+   The app chrome is dropped and the dark theme flipped to ink on
+   white so it prints legibly and saves cleanly as a PDF.
+   ============================================================ */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  /* Drop the app shell: sidebar, nav, buttons, controls. */
+  aside,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  html, body {
+    background: #fff !important;
+    color: #13202E !important;
+  }
+
+  /* Flatten the dark surfaces to print-friendly white/grey. */
+  .card,
+  .bg-panel,
+  .bg-panel-2,
+  [class*="bg-panel"] {
+    background: #fff !important;
+    border-color: #D6DEE7 !important;
+    box-shadow: none !important;
+  }
+  thead tr,
+  .bg-panel-2 {
+    background: #F1F5F9 !important;
+  }
+  .text-ink,
+  h1, h2, h3 {
+    color: #13202E !important;
+  }
+  .text-ink-muted,
+  .text-ink-soft {
+    color: #5A6B7B !important;
+  }
+
+  /* Status colours still need to read on paper. */
+  .text-signal-green { color: #15803D !important; }
+  .text-signal-amber { color: #B45309 !important; }
+  .text-signal-red   { color: #B91C1C !important; }
+  .pill { border: 1px solid #D6DEE7 !important; }
+
+  /* The report's own header only appears on the printed copy. */
+  .print-header {
+    display: block !important;
+    margin-bottom: 12px;
+  }
+
+  /* Keep tables and sections from splitting mid-row. */
+  .break-inside-avoid,
+  table, tr, .card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+}
